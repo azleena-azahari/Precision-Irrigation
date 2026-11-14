@@ -1,0 +1,545 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Maize Irrigation Dashboard</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout concept: a field-station console. Header with plot and date pickers, inputs on the left,
+   FAO and DRL results side by side on the right, then the prescription and the ETc comparison chart. */
+:root {
+  --bg: #f2f5f3; --surface: #ffffff; --surface-2: #f6f9f7; --ink: #13201a; --muted: #566660; --line: #d8e1dc;
+  --accent: #1c7c54; --accent-soft: #e2f1ea; --fao: #1d6fb8; --drl: #d9731a; --warn-soft: #fdf0e3;
+  --focus: #1d6fb8; --shadow: 0 1px 2px rgba(19,32,26,.05);
+  --font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1512; --surface: #151e1a; --surface-2: #1a2420; --ink: #e7f0eb; --muted: #93a59b; --line: #27342e;
+    --accent: #4cc38a; --accent-soft: #17352a; --fao: #5b95d9; --drl: #d6792c; --warn-soft: #33241a;
+    --focus: #7db3ee; --shadow: none; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1512; --surface: #151e1a; --surface-2: #1a2420; --ink: #e7f0eb; --muted: #93a59b; --line: #27342e;
+  --accent: #4cc38a; --accent-soft: #17352a; --fao: #5b95d9; --drl: #d6792c; --warn-soft: #33241a;
+  --focus: #7db3ee; --shadow: none; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 22px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; }
+h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 15px; font-weight: 600; }
+.sub { color: var(--muted); margin: 2px 0 0; }
+.num { font-variant-numeric: tabular-nums; }
+.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+header.top { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: flex-end; justify-content: space-between; }
+.controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.ctl { display: flex; flex-direction: column; gap: 4px; }
+.ctl > label { font-size: 12px; font-weight: 500; color: var(--muted); }
+.datebox { display: flex; gap: 6px; }
+
+input, select, button { font: inherit; color: inherit; }
+input[type=number], input[type=date], select {
+  height: 38px; padding: 0 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 7px; min-width: 0; width: 100%;
+}
+input[type=date] { width: auto; min-width: 150px; }
+select { width: auto; min-width: 150px; }
+button { cursor: pointer; }
+.btn { height: 38px; padding: 0 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 7px; font-weight: 500; }
+.btn:hover:not(:disabled) { border-color: var(--muted); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.icon { width: 38px; padding: 0; display: grid; place-items: center; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.main { display: grid; grid-template-columns: minmax(280px, 350px) minmax(0, 1fr); gap: 20px; margin-top: 22px; align-items: start; }
+.col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; box-shadow: var(--shadow); min-width: 0; }
+.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 12px; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field label { font-size: 12.5px; font-weight: 500; }
+.field .unit { color: var(--muted); font-weight: 400; }
+.field .hint { font-size: 11.5px; color: var(--muted); min-height: 16px; }
+.field.edited input { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+.stage-group { grid-column: 1 / -1; border: 0; padding: 0; margin: 0; min-width: 0; }
+.stage-group legend { font-size: 12.5px; font-weight: 500; padding: 0; margin-bottom: 6px; }
+.stages { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stage { position: relative; }
+.stage input { position: absolute; opacity: 0; inset: 0; cursor: pointer; margin: 0; }
+.stage span { display: block; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); font-weight: 500; font-size: 13px; line-height: 1.25; }
+.stage small { display: block; color: var(--muted); font-weight: 400; font-size: 11px; }
+.stage input:checked + span { border-color: var(--accent); background: var(--accent-soft); }
+.stage input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+details.extra { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+details.extra summary { cursor: pointer; font-weight: 600; font-size: 13px; list-style: none; display: flex; align-items: center; gap: 8px; }
+details.extra summary::-webkit-details-marker { display: none; }
+details.extra summary::before { content: ''; width: 7px; height: 7px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform .15s; }
+details.extra[open] summary::before { transform: rotate(45deg); }
+details.extra .fields { margin-top: 12px; }
+.panel-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+.chip { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 99px; background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+.chip.on { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+
+.cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.rescard { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: var(--shadow); min-width: 0; }
+.rescard header { padding: 12px 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); }
+.swatch { width: 14px; height: 4px; border-radius: 2px; flex: none; }
+.rescard.fao .swatch { background: var(--fao); }
+.rescard.drl .swatch { background: var(--drl); background-image: repeating-linear-gradient(90deg, var(--drl) 0 5px, transparent 5px 8px); }
+.rows { display: grid; }
+.metric { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+.metric:last-child { border-bottom: 0; }
+.metric .k { font-size: 12px; color: var(--muted); }
+.metric .v { font-family: var(--font-display); font-size: clamp(24px, 3.2vw, 32px); font-weight: 600; line-height: 1.15; }
+.metric .u { font-size: 12px; font-weight: 500; color: var(--muted); font-family: var(--font-body); margin-left: 4px; }
+.metric .n { font-size: 11.5px; color: var(--muted); }
+.note { color: var(--muted); font-size: 12.5px; margin: 10px 2px 0; }
+
+.rx { display: grid; grid-template-columns: auto 1fr 1fr; gap: 14px 28px; align-items: center; }
+.pill { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 99px; font-family: var(--font-display); font-weight: 700; font-size: 18px; letter-spacing: .02em; }
+.pill.irrigate { background: var(--ink); color: var(--surface); }
+.pill.skip { background: var(--accent-soft); color: var(--accent); }
+.pill svg { width: 20px; height: 20px; flex: none; }
+.big { font-family: var(--font-display); font-size: 30px; font-weight: 600; line-height: 1.1; }
+.big small { font-size: 13px; font-weight: 500; color: var(--muted); font-family: var(--font-body); }
+.kv .k { font-size: 12px; color: var(--muted); }
+.kv .sm { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.reason { grid-column: 1 / -1; margin: 2px 0 0; padding: 12px 14px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; }
+.reason .k { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 2px; }
+.reason p { margin: 0; font-size: 14.5px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; font-size: 12.5px; }
+.legend i { display: inline-block; width: 18px; height: 0; border-top: 2.5px solid; vertical-align: middle; margin-right: 6px; }
+.legend i.d { border-top-style: dashed; }
+.chartbox { position: relative; }
+#chart svg { display: block; width: 100%; height: auto; }
+#chart text { font-family: var(--font-body); }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,.15); min-width: 150px; z-index: 2; }
+.tip b { display: block; margin-bottom: 4px; font-family: var(--font-display); }
+.tip div { display: flex; justify-content: space-between; gap: 14px; }
+.tablewrap { overflow-x: auto; margin-top: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { text-align: right; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--muted); font-weight: 600; font-size: 11.5px; }
+tr.sel td { background: var(--accent-soft); }
+
+details.about { margin-top: 20px; }
+details.about summary { cursor: pointer; font-weight: 600; }
+details.about p, details.about li { color: var(--muted); font-size: 13px; max-width: 80ch; }
+.filebtn { display: inline-flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+.err { color: #b3261e; font-size: 12.5px; min-height: 18px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .err { color: #f2958d; } }
+:root[data-theme="dark"] .err { color: #f2958d; }
+
+@media (max-width: 900px) { .main { grid-template-columns: 1fr; } }
+@media (max-width: 560px) {
+  .cmp { gap: 12px; }
+  .metric { padding: 10px 12px; }
+  .rescard header { padding: 10px 12px; }
+  .rx { grid-template-columns: 1fr 1fr; }
+  .rx .decision { grid-column: 1 / -1; }
+  h1 { font-size: 21px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Maize · FAO-56 and deep reinforcement learning</div>
+      <h1>Maize Irrigation Dashboard</h1>
+      <p class="sub">Evapotranspiration results and the irrigation the DRL agent prescribes, per plot and date.</p>
+    </div>
+    <div class="controls">
+      <div class="ctl"><label for="plot">Plot</label><select id="plot"></select></div>
+      <div class="ctl"><label for="date">Date</label>
+        <div class="datebox">
+          <button class="btn icon" id="prev" type="button" aria-label="Previous day">&#8249;</button>
+          <input type="date" id="date">
+          <button class="btn icon" id="next" type="button" aria-label="Next day">&#8250;</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="main">
+    <!-- Inputs -->
+    <aside class="col">
+      <section class="panel" aria-labelledby="h-in">
+        <div class="panel-head"><h2 id="h-in">Input data</h2><span class="chip" id="edited">Dataset values</span></div>
+        <div class="fields">
+          <div class="field" id="f-theta"><label for="in-theta">Soil moisture <span class="unit">%</span></label><input type="number" id="in-theta" step="0.1" min="0" max="100" inputmode="decimal"><div class="hint num"></div></div>
+          <div class="field" id="f-t"><label for="in-t">Temperature <span class="unit">°C</span></label><input type="number" id="in-t" step="0.1" min="-10" max="55" inputmode="decimal"><div class="hint num"></div></div>
+          <div class="field" id="f-rain"><label for="in-rain">Rainfall <span class="unit">mm/day</span></label><input type="number" id="in-rain" step="0.1" min="0" max="500" inputmode="decimal"><div class="hint num"></div></div>
+          <div class="field" id="f-rh"><label for="in-rh">Humidity <span class="unit">%</span></label><input type="number" id="in-rh" step="0.1" min="0" max="100" inputmode="decimal"><div class="hint num"></div></div>
+          <fieldset class="stage-group" id="f-stage">
+            <legend>Growth stage</legend>
+            <div class="stages">
+              <label class="stage"><input type="radio" name="stage" value="0"><span>Initial<small>0–25 DAP</small></span></label>
+              <label class="stage"><input type="radio" name="stage" value="1"><span>Crop Development<small>25–55 DAP</small></span></label>
+              <label class="stage"><input type="radio" name="stage" value="2"><span>Mid-season<small>55–90 DAP</small></span></label>
+              <label class="stage"><input type="radio" name="stage" value="3"><span>Late-season<small>90–120 DAP</small></span></label>
+            </div>
+            <div class="hint" id="stage-hint" style="font-size:11.5px;color:var(--muted);margin-top:6px"></div>
+          </fieldset>
+        </div>
+
+        <details class="extra" id="extra">
+          <summary>Additional data</summary>
+          <div class="fields">
+            <div class="field"><label for="ex-u2">Wind speed <span class="unit">m/s</span></label><input type="number" id="ex-u2" step="0.1" min="0" max="30" value="2.0" inputmode="decimal"><div class="hint">Default 2.0</div></div>
+            <div class="field"><label for="ex-rn">Net radiation <span class="unit">MJ/m²/day</span></label><input type="number" id="ex-rn" step="0.1" min="-5" max="40" value="12.0" inputmode="decimal"><div class="hint">Default 12.0</div></div>
+            <div class="field"><label for="ex-g">Soil heat flux <span class="unit">MJ/m²/day</span></label><input type="number" id="ex-g" step="0.1" min="-5" max="5" value="0.0" inputmode="decimal"><div class="hint">Default 0.0</div></div>
+            <div class="field"><label for="ex-h">Crop height <span class="unit">m</span></label><input type="number" id="ex-h" step="0.1" min="0" max="5" value="1.0" inputmode="decimal"><div class="hint">Default 1.0</div></div>
+          </div>
+        </details>
+
+        <div class="panel-foot">
+          <button class="btn" id="reset" type="button">Reset to dataset values</button>
+        </div>
+        <p class="note" style="margin-bottom:0">Main inputs change the selected plot and date. Additional data applies to every day.</p>
+      </section>
+    </aside>
+
+    <!-- Results -->
+    <div class="col">
+      <section aria-labelledby="h-res">
+        <div class="panel-head" style="margin-bottom:10px"><h2 id="h-res">Latest result <span class="unit num" id="res-date" style="font-weight:400;color:var(--muted)"></span></h2></div>
+        <div class="cmp">
+          <article class="rescard fao">
+            <header><span class="swatch"></span><h3 style="font-size:14px">FAO-56 calculation</h3></header>
+            <div class="rows">
+              <div class="metric"><span class="k">ET0 (reference)</span><span class="v num"><span id="fao-et0">–</span><span class="u">mm/day</span></span></div>
+              <div class="metric"><span class="k">Kc (crop coefficient)</span><span class="v num" id="fao-kc">–</span><span class="n" id="fao-kcn"></span></div>
+              <div class="metric"><span class="k">ETc (crop water use)</span><span class="v num"><span id="fao-etc">–</span><span class="u">mm/day</span></span></div>
+            </div>
+          </article>
+          <article class="rescard drl">
+            <header><span class="swatch"></span><h3 style="font-size:14px">DRL process</h3></header>
+            <div class="rows">
+              <div class="metric"><span class="k">ET0 (reference)</span><span class="v num"><span id="drl-et0">–</span><span class="u">mm/day</span></span></div>
+              <div class="metric"><span class="k">Kc (× Ks)</span><span class="v num" id="drl-kc">–</span><span class="n" id="drl-kcn"></span></div>
+              <div class="metric"><span class="k">ETc (actual)</span><span class="v num"><span id="drl-etc">–</span><span class="u">mm/day</span></span></div>
+            </div>
+          </article>
+        </div>
+        <p class="note">The DRL agent takes ET0 from the same weather inputs. Its Kc is the FAO Kc multiplied by the water-stress factor Ks, and its ETc is the water the crop actually uses once the prescribed irrigation and rain are applied. The two columns match when the crop has enough water.</p>
+      </section>
+
+      <section class="panel" aria-labelledby="h-rx">
+        <div class="panel-head"><h2 id="h-rx">Irrigation prescription from the DRL agent</h2><span class="chip num" id="rx-date"></span></div>
+        <div class="rx">
+          <div class="decision"><div class="eyebrow" style="margin-bottom:6px">Decision</div><div id="rx-pill"></div></div>
+          <div class="kv"><div class="k">Water to irrigate</div><div class="big num"><span id="rx-mm">–</span> <small>mm</small></div><div class="sm num" id="rx-vol"></div></div>
+          <div class="kv"><div class="k">Root-zone depletion</div><div class="big num"><span id="rx-dep">–</span><small>%</small> <small style="display:block">of available water</small></div><div class="sm num" id="rx-ks"></div></div>
+          <div class="reason"><span class="k">Reason</span><p id="rx-reason"></p></div>
+        </div>
+        <p class="note" id="rx-budget" style="margin-bottom:0"></p>
+      </section>
+
+      <section class="panel" aria-labelledby="h-ch">
+        <div class="panel-head">
+          <h2 id="h-ch">ETc comparison, FAO-56 and DRL</h2>
+          <div class="legend" aria-label="Legend">
+            <span><i style="border-color:var(--fao)"></i>FAO-56 ETc</span>
+            <span><i class="d" style="border-color:var(--drl)"></i>DRL actual ETc</span>
+          </div>
+        </div>
+        <div class="chartbox"><div id="chart" role="img" aria-label="Line chart comparing daily ETc from the FAO-56 calculation and the DRL process"></div><div class="tip" id="tip" hidden></div></div>
+        <p class="note" id="chart-note"></p>
+        <button class="btn" id="tblbtn" type="button" aria-expanded="false" style="margin-top:6px">Show as table</button>
+        <div class="tablewrap" id="tblwrap" hidden></div>
+      </section>
+    </div>
+  </div>
+
+  <details class="about panel" style="margin-top:20px">
+    <summary>About the calculations and the DRL policy</summary>
+    <p><b>FAO-56.</b> ET0 comes from the Penman-Monteith equation, using the day's temperature and humidity (daily maximum and minimum are shifted when you edit the mean) plus the additional data. Kc is the stage value (0.35, 0.75, 1.15, 0.95). In mid-season and late-season it is adjusted for wind, minimum humidity and crop height. ETc = Kc × ET0.</p>
+    <p><b>DRL.</b> A Deep Q-Network chooses 0, 5, 10, 15 or 20 mm each day from the root-zone depletion, growth stage, ETc, rain today and tomorrow, and the remaining 150 mm irrigation budget. It was trained in the same water-balance simulator as the Colab notebook. The rain "forecast" for today is the rainfall value above, and tomorrow's rain is taken from the dataset.</p>
+    <p><b>Soil assumptions</b> (not measured in the dataset): field capacity per plot is the 98th percentile of its soil moisture, wilting point is half of that, root depth grows from 0.2 m to 1.0 m by 70 days after sowing. Irrigation efficiency is 90% and 80% of rain reaches the root zone. 1 mm of irrigation equals 10 m³ per hectare.</p>
+    <p><b>Policy in use:</b> <span id="policyname"></span></p>
+    <div class="filebtn"><label class="btn" for="policyfile" style="display:inline-flex;align-items:center">Load a DRL policy (JSON)</label>
+      <input type="file" id="policyfile" accept=".json,application/json" style="position:absolute;left:-9999px">
+      <span class="err" id="policyerr" role="status"></span></div>
+    <p>To use the DQN you trained in Colab, run the export cell at the end of the notebook and load the <code>dqn_policy.json</code> file here.</p>
+  </details>
+</div>
+
+<script>
+/* ---- Calculation core: FAO-56 and the DRL policy (same logic as the Colab notebooks) ---- */
+const ACT = [0, 5, 10, 15, 20];          // irrigation depths the agent can choose (mm)
+const P_DEP = 0.55, IRR_EFF = 0.90, RAIN_EFF = 0.80, BUDGET = 150;
+const KC_TAB = [0.35, 0.75, 1.15, 0.95];
+const KY = [0.4, 0.4, 1.3, 0.5];
+const STAGES = ['Initial', 'Crop Development', 'Mid-season', 'Late-season'];
+const REP_DAS = [12, 40, 72, 105];       // representative days after sowing when the stage is edited by hand
+const stageOf = d => (d < 25 ? 0 : d < 55 ? 1 : d < 90 ? 2 : 3);
+const zrOf = d => 0.2 + 0.8 * Math.min(d, 70) / 70;
+const tawOf = (fc, pwp, das) => (fc - pwp) * 10 * zrOf(das);
+const svp = t => 0.6108 * Math.exp(17.27 * t / (t + 237.3));
+
+/* FAO-56 Penman-Monteith ET0, single-crop Kc (stage table + climate adjustment for mid/late season), ETc = Kc x ET0 */
+function fao(i) {
+  const es = (svp(i.tmax) + svp(i.tmin)) / 2;
+  const ea = (svp(i.tmin) * i.rhmax / 100 + svp(i.tmax) * i.rhmin / 100) / 2;
+  const vpd = Math.max(0, es - ea);
+  const delta = 4098 * svp(i.tmean) / Math.pow(i.tmean + 237.3, 2);
+  const gamma = 0.000665 * 101.3;                      // sea-level pressure
+  const num = 0.408 * delta * (i.rn - i.g) + gamma * 900 / (i.tmean + 273) * i.u2 * vpd;
+  const et0 = Math.max(0, num / (delta + gamma * (1 + 0.34 * i.u2)));
+  let kc = KC_TAB[i.stage];
+  if (i.stage >= 2) kc += (0.04 * (i.u2 - 2) - 0.004 * (i.rhmin - 45)) * Math.pow(i.h / 3, 0.3);
+  return { et0, kc, etc: kc * et0, vpd };
+}
+
+function buildObs(dr, taw, das, kc, etc, rain, rainNext, budgetLeft, daysLeftFrac) {
+  const o = [dr / taw, das / 120, KY[stageOf(das)] / 1.3, kc / 1.2, etc / 8,
+             RAIN_EFF * rain / 30, RAIN_EFF * rainNext / 30, budgetLeft / BUDGET, daysLeftFrac, taw / 200];
+  return o.map(v => Math.min(3, Math.max(-1, v)));
+}
+
+function qValues(policy, obs) {                         // MLP forward pass: ReLU hidden layers, linear output
+  let x = obs;
+  policy.layers.forEach((L, k) => {
+    const y = L.W.map((row, r) => row.reduce((s, w, c) => s + w * x[c], L.b[r]));
+    x = k < policy.layers.length - 1 ? y.map(v => Math.max(0, v)) : y;
+  });
+  return x;
+}
+
+function explain(irr, dr, taw, rainEff, rainEffNext, etc, budgetLeft) {
+  const dep = dr / taw, pct = Math.round(dep * 100), thr = Math.round(P_DEP * 100);
+  if (irr > 0) {
+    const why = dr >= P_DEP * taw
+      ? `depletion ${pct}% of available water is above the stress threshold (${thr}%)`
+      : `depletion ${pct}% is close to the stress threshold (${thr}%) with ETc ${etc.toFixed(1)} mm/day and little rain expected`;
+    return `Irrigate ${irr} mm: ${why}.`;
+  }
+  if (budgetLeft <= 0) return 'Skip: irrigation budget used up.';
+  if (rainEff >= Math.max(dr, 1) * 0.8) return `Skip: forecast rain (${Math.round(rainEff / RAIN_EFF)} mm) refills the root zone.`;
+  let m = `Skip: soil water adequate (depletion ${pct}%, threshold ${thr}%).`;
+  if (rainEffNext > 3) m += ` Rain expected tomorrow (${Math.round(rainEffNext / RAIN_EFF)} mm).`;
+  return m;
+}
+
+/* One DRL decision. c: {fc,pwp,das,theta,rain,rainNext,etc,kc,budgetLeft,daysLeftFrac} */
+function drl(policy, c) {
+  const zr = zrOf(c.das), taw = tawOf(c.fc, c.pwp, c.das), raw = P_DEP * taw;
+  const dr = Math.min(taw, Math.max(0, (c.fc - c.theta) * 10 * zr));
+  const q = qValues(policy, buildObs(dr, taw, c.das, c.kc, c.etc, c.rain, c.rainNext, c.budgetLeft, c.daysLeftFrac));
+  const a = q.indexOf(Math.max(...q));
+  const irr = Math.min(ACT[a], Math.max(0, c.budgetLeft));
+  const drAfter = Math.min(taw, Math.max(0, dr - IRR_EFF * irr - RAIN_EFF * c.rain));
+  const ks = drAfter <= raw ? 1 : Math.max(0, (taw - drAfter) / (taw - raw));
+  return { irr, ks, dr, taw, raw, depPct: 100 * dr / taw, eta: ks * c.etc, kcEff: ks * c.kc,
+           reason: explain(irr, dr, taw, RAIN_EFF * c.rain, RAIN_EFF * c.rainNext, c.etc, c.budgetLeft) };
+}
+
+/* Whole 30-day series for one plot. ov = {idx, theta, t, rh, rain, stage} replaces the selected day's main inputs.
+   ex = {u2, rn, g, h} applies to every day. */
+function buildSeries(data, plot, policy, ex, ov) {
+  const P = data.plots[plot], soil = data.soil[plot], n = data.days.length, out = [];
+  let budget = BUDGET;
+  for (let i = 0; i < n; i++) {
+    let t = P.t[i], rh = P.rh[i], rain = P.rain[i], theta = P.theta[i];
+    let tx = P.tx[i], tn = P.tn[i], rhx = P.rhx[i], rhn = P.rhn[i];
+    let stage = stageOf(P.das[i]), das = P.das[i];
+    if (ov && ov.idx === i) {
+      const dT = ov.t - t, dR = ov.rh - rh;
+      tx += dT; tn += dT; t = ov.t;
+      rhx = Math.min(100, rhx + dR); rhn = Math.max(0, rhn + dR); rh = ov.rh;
+      rain = ov.rain; theta = ov.theta;
+      if (ov.stage !== stage) { stage = ov.stage; das = REP_DAS[stage]; }
+    }
+    const f = fao({ tmean: t, tmax: tx, tmin: tn, rhmax: rhx, rhmin: rhn, u2: ex.u2, rn: ex.rn, g: ex.g, h: ex.h, stage });
+    const rainNext = i + 1 < n ? P.rain[i + 1] : 0;
+    const d = drl(policy, { fc: soil.fc, pwp: soil.pwp, das, theta, rain, rainNext, etc: f.etc, kc: f.kc,
+                            budgetLeft: budget, daysLeftFrac: (n - i) / n });
+    budget -= d.irr;
+    out.push({ date: data.days[i], stage, das, theta, t, rh, rain, fao: f, drl: d, budgetLeft: budget,
+               cumIrr: BUDGET - budget });
+  }
+  return out;
+}
+
+
+const DATA = {"soil":{"P01":{"fc":24.17,"pwp":12.09},"P02":{"fc":31.89,"pwp":15.95},"P03":{"fc":37.56,"pwp":18.78},"P04":{"fc":34.74,"pwp":17.37}},"days":["2026-10-01","2026-10-02","2026-10-03","2026-10-04","2026-10-05","2026-10-06","2026-10-07","2026-10-08","2026-10-09","2026-10-10","2026-10-11","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16","2026-10-17","2026-10-18","2026-10-19","2026-10-20","2026-10-21","2026-10-22","2026-10-23","2026-10-24","2026-10-25","2026-10-26","2026-10-27","2026-10-28","2026-10-29","2026-10-30"],"plots":{"P01":{"das":[5.0,6.0,7.0,8.0,9.0,10.0,11.0,12.0,13.0,14.0,15.0,16.0,17.0,18.0,19.0,20.0,21.0,22.0,23.0,24.0,25.0,26.0,27.0,28.0,29.0,30.0,31.0,32.0,33.0,34.0],"theta":[18.529,22.127,22.071,22.033,21.499,20.857,22.049,21.566,21.052,20.37,22.072,21.951,22.019,21.603,22.236,21.982,21.35,21.63,21.132,20.546,22.036,21.54,22.675,21.211,20.474,21.983,21.163,22.134,21.069,20.134],"t":[25.026,25.554,26.975,27.73,25.347,26.016,27.659,25.039,26.021,26.393,26.189,25.949,26.43,24.541,25.855,27.607,24.1,26.67,25.812,26.366,28.056,26.204,26.526,26.821,24.751,26.527,25.263,26.352,25.411,27.65],"tx":[31.15,31.51,32.89,32.92,31.11,30.35,32.69,30.68,31.86,31.62,31.69,31.24,32.59,29.83,32.03,32.14,29.19,31.75,31.88,31.48,32.71,31.01,31.57,33.48,30.01,32.69,31.03,31.24,30.11,32.63],"tn":[19.16,19.75,21.56,22.43,19.95,21.64,22.69,19.17,19.6,21.66,20.4,20.57,20.3,19.18,19.89,23.13,19.13,21.88,19.53,21.68,23.4,21.76,21.5,20.18,19.46,20.33,19.83,21.2,20.87,23.02],"rh":[81.937,81.834,81.36,79.28,78.25,82.129,79.884,78.502,78.609,82.473,81.24,82.004,79.206,82.556,81.774,78.443,82.443,78.427,78.966,82.35,79.172,82.383,79.003,79.026,82.406,79.076,81.928,78.279,78.765,78.974],"rhx":[97.73,99.0,99.0,94.71,95.06,99.0,98.71,95.94,96.01,99.0,96.47,98.34,95.28,98.84,98.47,94.38,99.0,95.22,95.72,99.0,96.18,98.97,96.25,95.65,98.67,97.84,99.0,96.51,94.66,96.53],"rhn":[63.87,64.06,66.37,63.95,61.23,65.8,62.24,62.46,60.86,65.91,65.2,65.16,62.8,65.82,64.73,60.19,65.55,62.45,63.2,64.51,63.45,64.63,60.89,61.99,63.73,62.55,64.11,59.12,61.76,59.85],"rain":[15.963,8.977,14.847,0.0,0.0,15.283,0.0,0.0,0.0,30.348,14.604,8.38,0.0,13.639,6.042,0.0,3.663,0.0,0.0,14.763,0.0,16.813,0.0,0.0,16.473,0.0,30.09,0.0,0.0,0.0]},"P02":{"das":[30.0,31.0,32.0,33.0,34.0,35.0,36.0,37.0,38.0,39.0,40.0,41.0,42.0,43.0,44.0,45.0,46.0,47.0,48.0,49.0,50.0,51.0,52.0,53.0,54.0,55.0,56.0,57.0,58.0,59.0],"theta":[26.473,30.133,29.965,29.952,28.952,28.03,30.059,29.244,28.139,26.985,30.06,29.957,30.008,28.978,30.182,29.979,28.651,29.046,28.067,26.81,30.066,28.961,30.595,28.486,26.994,30.003,28.405,29.845,28.278,26.512],"t":[25.026,25.554,26.975,27.73,25.347,26.016,27.659,25.039,26.021,26.393,26.189,25.949,26.43,24.541,25.855,27.607,24.1,26.67,25.812,26.366,28.056,26.204,26.526,26.821,24.751,26.527,25.263,26.352,25.411,27.65],"tx":[31.15,31.51,32.89,32.92,31.11,30.35,32.69,30.68,31.86,31.62,31.69,31.24,32.59,29.83,32.03,32.14,29.19,31.75,31.88,31.48,32.71,31.01,31.57,33.48,30.01,32.69,31.03,31.24,30.11,32.63],"tn":[19.16,19.75,21.56,22.43,19.95,21.64,22.69,19.17,19.6,21.66,20.4,20.57,20.3,19.18,19.89,23.13,19.13,21.88,19.53,21.68,23.4,21.76,21.5,20.18,19.46,20.33,19.83,21.2,20.87,23.02],"rh":[81.937,81.834,81.36,79.28,78.25,82.129,79.884,78.502,78.609,82.473,81.24,82.004,79.206,82.556,81.774,78.443,82.443,78.427,78.966,82.35,79.172,82.383,79.003,79.026,82.406,79.076,81.928,78.279,78.765,78.974],"rhx":[97.73,99.0,99.0,94.71,95.06,99.0,98.71,95.94,96.01,99.0,96.47,98.34,95.28,98.84,98.47,94.38,99.0,95.22,95.72,99.0,96.18,98.97,96.25,95.65,98.67,97.84,99.0,96.51,94.66,96.53],"rhn":[63.87,64.06,66.37,63.95,61.23,65.8,62.24,62.46,60.86,65.91,65.2,65.16,62.8,65.82,64.73,60.19,65.55,62.45,63.2,64.51,63.45,64.63,60.89,61.99,63.73,62.55,64.11,59.12,61.76,59.85],"rain":[15.963,8.977,14.847,0.0,0.0,15.283,0.0,0.0,0.0,30.348,14.604,8.38,0.0,13.639,6.042,0.0,3.663,0.0,0.0,14.763,0.0,16.813,0.0,0.0,16.473,0.0,30.09,0.0,0.0,0.0]},"P03":{"das":[60.0,61.0,62.0,63.0,64.0,65.0,66.0,67.0,68.0,69.0,70.0,71.0,72.0,73.0,74.0,75.0,76.0,77.0,78.0,79.0,80.0,81.0,82.0,83.0,84.0,85.0,86.0,87.0,88.0,89.0],"theta":[32.467,36.164,36.042,36.087,34.081,32.333,35.863,34.647,32.779,31.087,36.012,36.012,36.047,34.654,36.216,35.951,34.131,34.634,33.311,31.839,35.979,34.617,36.507,34.288,32.564,35.97,34.297,35.911,34.201,32.428],"t":[25.026,25.554,26.975,27.73,25.347,26.016,27.659,25.039,26.021,26.393,26.189,25.949,26.43,24.541,25.855,27.607,24.1,26.67,25.812,26.366,28.056,26.204,26.526,26.821,24.751,26.527,25.263,26.352,25.411,27.65],"tx":[31.15,31.51,32.89,32.92,31.11,30.35,32.69,30.68,31.86,31.62,31.69,31.24,32.59,29.83,32.03,32.14,29.19,31.75,31.88,31.48,32.71,31.01,31.57,33.48,30.01,32.69,31.03,31.24,30.11,32.63],"tn":[19.16,19.75,21.56,22.43,19.95,21.64,22.69,19.17,19.6,21.66,20.4,20.57,20.3,19.18,19.89,23.13,19.13,21.88,19.53,21.68,23.4,21.76,21.5,20.18,19.46,20.33,19.83,21.2,20.87,23.02],"rh":[81.937,81.834,81.36,79.28,78.25,82.129,79.884,78.502,78.609,82.473,81.24,82.004,79.206,82.556,81.774,78.443,82.443,78.427,78.966,82.35,79.172,82.383,79.003,79.026,82.406,79.076,81.928,78.279,78.765,78.974],"rhx":[97.73,99.0,99.0,94.71,95.06,99.0,98.71,95.94,96.01,99.0,96.47,98.34,95.28,98.84,98.47,94.38,99.0,95.22,95.72,99.0,96.18,98.97,96.25,95.65,98.67,97.84,99.0,96.51,94.66,96.53],"rhn":[63.87,64.06,66.37,63.95,61.23,65.8,62.24,62.46,60.86,65.91,65.2,65.16,62.8,65.82,64.73,60.19,65.55,62.45,63.2,64.51,63.45,64.63,60.89,61.99,63.73,62.55,64.11,59.12,61.76,59.85],"rain":[15.963,8.977,14.847,0.0,0.0,15.283,0.0,0.0,0.0,30.348,14.604,8.38,0.0,13.639,6.042,0.0,3.663,0.0,0.0,14.763,0.0,16.813,0.0,0.0,16.473,0.0,30.09,0.0,0.0,0.0]},"P04":{"das":[85.0,86.0,87.0,88.0,89.0,90.0,91.0,92.0,93.0,94.0,95.0,96.0,97.0,98.0,99.0,100.0,101.0,102.0,103.0,104.0,105.0,106.0,107.0,108.0,109.0,110.0,111.0,112.0,113.0,114.0],"theta":[29.478,33.082,33.045,33.042,31.154,29.475,33.019,31.871,30.02,28.602,32.986,32.944,32.954,31.698,33.286,32.965,31.481,31.865,31.042,29.861,32.925,31.968,33.345,31.797,30.448,33.115,31.712,33.03,31.737,30.592],"t":[25.026,25.554,26.975,27.73,25.347,26.016,27.659,25.039,26.021,26.393,26.189,25.949,26.43,24.541,25.855,27.607,24.1,26.67,25.812,26.366,28.056,26.204,26.526,26.821,24.751,26.527,25.263,26.352,25.411,27.65],"tx":[31.15,31.51,32.89,32.92,31.11,30.35,32.69,30.68,31.86,31.62,31.69,31.24,32.59,29.83,32.03,32.14,29.19,31.75,31.88,31.48,32.71,31.01,31.57,33.48,30.01,32.69,31.03,31.24,30.11,32.63],"tn":[19.16,19.75,21.56,22.43,19.95,21.64,22.69,19.17,19.6,21.66,20.4,20.57,20.3,19.18,19.89,23.13,19.13,21.88,19.53,21.68,23.4,21.76,21.5,20.18,19.46,20.33,19.83,21.2,20.87,23.02],"rh":[81.937,81.834,81.36,79.28,78.25,82.129,79.884,78.502,78.609,82.473,81.24,82.004,79.206,82.556,81.774,78.443,82.443,78.427,78.966,82.35,79.172,82.383,79.003,79.026,82.406,79.076,81.928,78.279,78.765,78.974],"rhx":[97.73,99.0,99.0,94.71,95.06,99.0,98.71,95.94,96.01,99.0,96.47,98.34,95.28,98.84,98.47,94.38,99.0,95.22,95.72,99.0,96.18,98.97,96.25,95.65,98.67,97.84,99.0,96.51,94.66,96.53],"rhn":[63.87,64.06,66.37,63.95,61.23,65.8,62.24,62.46,60.86,65.91,65.2,65.16,62.8,65.82,64.73,60.19,65.55,62.45,63.2,64.51,63.45,64.63,60.89,61.99,63.73,62.55,64.11,59.12,61.76,59.85],"rain":[15.963,8.977,14.847,0.0,0.0,15.283,0.0,0.0,0.0,30.348,14.604,8.38,0.0,13.639,6.042,0.0,3.663,0.0,0.0,14.763,0.0,16.813,0.0,0.0,16.473,0.0,30.09,0.0,0.0,0.0]}}};
+const DEFAULT_POLICY = {"layers":[{"W":[[0.48373,-0.23842,0.37328,-0.05713,-0.37852,-0.02745,-0.09701,0.5916,-0.17065,-1.19159],[-0.27874,0.01848,-1.03979,-0.09785,-0.55719,-0.32748,-0.2434,-0.14145,0.18409,0.46623],[0.20985,0.48784,0.32991,0.63061,0.79989,0.39883,0.28771,-3.91852,0.6647,-0.3745],[-1.07417,-0.46189,-0.1779,0.16269,-0.21929,-0.00201,0.15244,0.26743,0.56572,0.62969],[-0.6943,0.44294,0.2573,-0.03956,-0.16428,-0.54903,-0.18433,0.79385,0.79953,0.3883],[0.13536,-0.36707,0.23929,0.35997,-0.64636,0.48784,0.58898,0.50187,-0.53059,-0.5681],[-0.15884,-0.74135,0.7829,-0.1681,-0.08768,0.28923,0.20127,0.74236,0.42249,-1.35449],[0.55047,0.04195,0.45842,-0.49664,0.81,-0.42501,-0.48835,0.01431,-0.08717,0.53424],[0.55643,-1.77481,-0.6195,-0.25725,-0.26488,0.05107,0.04893,0.62112,-0.03014,0.67427],[-0.1664,1.23447,-0.12527,-0.16247,0.29357,0.16364,0.15468,0.5783,-1.4607,0.19417],[-0.07118,0.5594,-0.16474,-0.2794,0.49924,-0.17669,-0.12034,0.92828,-1.58818,0.8261],[-0.96933,-0.23597,-0.32506,-0.2822,-0.17368,0.17547,0.33293,0.5095,0.42149,0.16174],[0.35222,0.37748,0.03381,-0.63807,-0.06039,-0.34414,-0.63627,0.11558,-0.25426,-0.46054],[-0.86742,0.0532,-0.08983,0.51615,-0.20753,0.27343,0.40255,0.71986,-1.06127,0.89672],[-0.23492,0.1102,0.26642,0.18429,0.23644,-0.14464,-0.95512,-0.42693,-0.78914,-0.0332],[-0.12914,0.03733,-0.37996,-0.22836,-0.00516,-0.66428,0.13447,-0.04744,-0.53027,-1.07252],[0.62866,-0.27991,-0.05591,-0.12962,0.93784,0.15685,0.05086,-1.15636,0.77255,0.01492],[1.23822,-0.12439,0.54136,0.0521,0.34428,-0.09349,-0.26766,0.25684,-0.99395,-0.21018],[0.4521,-2.70805,-0.10946,-0.40017,-0.60902,0.15051,0.21174,0.64718,0.19385,-0.17648],[-0.66407,-0.69795,0.2707,-0.27094,-0.40383,0.68545,-0.38049,-0.55154,-0.47347,0.0701],[-0.35424,-0.14482,-0.44935,0.48824,0.57648,-0.17557,-0.03782,-0.25487,-1.10333,1.32116],[-0.09465,1.09026,-0.53895,-0.08175,-0.36576,0.13663,0.08255,-0.25398,-0.20629,1.42757],[-0.01483,-1.47483,-0.13139,0.21392,-0.45961,0.86154,0.88017,0.34858,-0.07824,-0.88577],[-0.44909,-0.50222,0.10884,0.97406,-0.36751,0.25584,-0.04187,1.72778,-2.23109,0.33067],[1.18432,-0.06972,0.53782,-0.25371,0.86473,-0.33609,-0.20974,0.8468,-0.12502,-0.70378],[-0.2507,0.07747,0.34267,-0.55612,0.25138,-0.14237,0.04747,-0.15896,-0.46681,1.44217],[-0.3149,-0.20262,-0.47666,-0.15479,-0.00263,0.34337,-0.27302,-0.08308,-0.63347,-0.37003],[1.80428,0.46947,-0.07094,-0.55022,-0.22024,0.14382,-0.20155,-0.0347,-0.42909,0.64724],[0.202,-0.16751,-0.09868,-0.23681,-1.31304,0.05173,-0.47876,-0.44841,-0.28633,0.3275],[-0.82955,-0.64691,0.31023,0.40101,-0.47879,0.03781,0.1364,0.27215,-0.3404,0.66807],[0.53811,0.28491,0.2497,-1.68701,0.11656,-0.01138,-0.06576,-0.282,0.02476,0.1843],[-0.49386,-0.07869,0.43671,-0.50026,0.48934,-0.20715,-0.22975,-0.16876,-0.44501,0.76608],[0.52491,-0.40147,-0.04991,0.35313,0.80519,-0.31083,-0.66483,-0.96735,0.28364,-0.4386],[0.03509,-1.02958,0.40213,-0.12436,-0.1573,-0.04841,-0.16855,0.2063,0.92456,-0.97121],[0.02427,-0.45635,0.54562,0.0848,-0.02756,-1.11431,-1.55416,-0.62813,0.65957,-0.32332],[-1.47227,0.77741,-0.35034,-0.55376,0.19905,0.18101,0.0775,0.42239,0.63333,0.20989],[-0.93599,1.08294,0.27902,-0.19445,-0.47353,0.15682,0.05244,0.01687,-0.30458,0.52979],[0.20701,-0.37302,0.09876,0.39409,-0.75504,0.13293,0.31654,0.17526,0.17836,0.94673],[-0.48666,-0.66149,-0.38751,0.0548,-0.35602,-0.21789,-0.43603,-0.27746,-0.44935,0.16434],[0.065,-0.16288,0.03215,-0.35579,-0.21769,-0.20925,1.39925,-0.24092,0.18052,0.08062],[-0.65229,0.03428,-0.79332,0.97957,-0.87281,0.03653,0.06996,0.9809,-0.07244,0.00668],[0.6224,0.05284,-0.78909,-1.32933,-0.31088,0.28743,0.17691,0.37722,0.88958,-0.32458],[-1.13098,0.42834,0.24244,-0.41055,0.1964,0.19891,-0.11713,0.69856,1.00279,-0.76598],[1.48379,-0.40461,0.56439,0.198,0.04116,0.05411,-0.43566,0.42119,0.03821,-0.39323],[0.14284,0.0578,0.20225,0.79507,0.28109,-0.42073,-0.31008,-0.50956,0.04238,-0.82888],[0.56369,0.055,0.1647,-0.31335,-0.1413,-0.6607,-0.87318,0.2908,0.02965,0.36924],[-0.6475,-0.95464,-0.56533,0.42776,0.39862,0.05366,-0.57345,0.00192,-0.1615,-0.27982],[-1.26914,0.01125,-0.38609,0.81173,0.04552,0.44754,0.42473,1.17084,-1.76025,1.09216],[0.58789,1.05573,-0.00835,-0.01762,-0.22796,-0.46537,-0.52887,-0.39228,0.5746,-0.25475],[-1.06025,0.29328,0.01908,-0.21609,0.42384,-0.08563,-0.09703,0.52174,-0.62656,0.49458],[1.39523,0.31426,-0.26242,-0.18417,0.8507,-0.64115,-0.59279,0.00686,0.45344,-0.49001],[0.07967,0.1248,-0.2658,-0.31516,0.33315,-0.40429,0.03481,1.27632,-0.55255,0.21037],[0.85067,-0.38556,-0.21627,-0.31879,0.20318,-0.00956,0.42801,0.09844,-0.33969,0.91348],[0.58926,0.2371,0.17134,0.98185,0.61536,-0.61171,-0.43339,-0.52883,-0.32273,-1.36985],[-0.81007,0.11476,0.33298,0.01352,0.15946,-1.11952,-0.63171,0.10925,0.50615,-0.45986],[1.08751,-0.04888,0.57441,0.49921,-0.01357,-0.2862,-0.16893,-2.70103,0.96252,-0.40114],[-0.77489,-0.58345,-0.20513,0.60247,-0.504,0.06251,0.1354,0.62998,0.75328,-0.56603],[1.07435,0.11145,0.76411,-0.32934,-0.07495,0.27768,-0.01873,-0.12953,0.29534,-0.33994],[1.38839,-0.47945,0.15715,0.17264,0.18963,-0.90716,-1.05293,0.14001,-0.46105,0.19171],[-0.68162,-0.2482,0.01624,-0.55998,0.29159,-0.00829,-0.46335,-0.67927,-0.70015,0.02282],[-0.7768,-0.71894,-0.13994,1.05785,0.04576,0.00056,-0.11223,0.75552,-0.65538,-0.15875],[-0.201,-0.73132,-0.02117,-0.2569,0.07006,-0.16673,-0.15342,-0.49394,0.49024,0.90412],[1.2498,-0.14698,0.55276,0.33547,-0.24119,-0.25465,0.12234,-1.06036,-0.07348,0.04679],[-0.99964,-0.28506,0.36103,-0.04967,-0.2482,0.43012,0.68307,0.51691,0.73331,-0.39352]],"b":[0.02566,0.0,0.44635,0.02061,-0.39936,0.07784,0.1294,-0.44551,0.3362,0.19111,0.42267,-0.30614,0.0,0.11313,0.00301,0.0,-0.18679,-0.34527,-0.01124,-0.33216,0.29431,-0.45303,0.11061,0.79083,-0.23497,-0.27824,0.0,-0.09941,0.0,0.2746,0.0,0.09861,0.28381,0.07626,-0.12387,-0.06821,-0.01994,-0.35627,0.0,0.14895,0.25386,0.36642,-0.2242,-0.25056,-0.14758,-0.41968,-0.0873,0.46544,-0.28721,0.1644,-0.21982,-0.51861,-0.40727,0.13704,-0.07555,0.35725,0.05223,-0.15314,-0.25792,0.0,0.19581,0.18527,-0.18088,-0.17412]},{"W":[[-0.21216,0.05565,0.23528,0.16621,0.189,-0.1416,-0.16832,-0.51245,-0.5313,-0.09539,-0.36463,-0.83298,0.24111,-0.47683,-0.13857,-0.06281,0.31303,-0.6585,-0.52109,0.23661,-0.33908,-0.11707,0.33899,-0.83168,-0.24357,-0.56326,-0.02565,0.31816,-0.17856,-0.23916,-0.02661,-1.15658,0.06718,-0.49271,-0.31855,0.5195,0.00282,0.08878,-0.00779,0.27661,0.0244,-0.08258,0.44022,0.06812,0.3447,-0.30281,0.35067,-0.54821,0.44553,-0.35488,0.04009,-0.47806,-0.61966,0.60086,0.41304,0.27436,0.06343,0.57067,-0.3716,-0.22968,0.10148,-0.10322,-0.52227,0.24917],[-0.15738,0.08507,-0.05862,0.74151,-0.28327,-0.33997,0.25359,-0.33642,0.16751,-0.02566,0.17938,-0.94911,0.09563,0.32693,0.18275,0.16222,-0.32767,0.06444,0.08649,-0.1212,0.74395,-0.15943,-1.35661,0.43261,0.24164,-0.18234,-0.01797,0.00566,-0.06728,0.18507,-0.21952,0.16307,-0.25016,0.07056,-0.49161,-0.19718,-0.61412,-0.22656,0.08999,-0.17365,-0.25654,0.12007,-0.51194,-0.33896,0.16943,0.01217,0.07878,-0.53661,-0.19699,-0.38259,0.38422,0.05313,0.11627,0.38285,-0.69985,-0.21541,0.32737,0.01454,0.02999,-0.07976,0.19193,0.07756,-0.19919,-0.21254],[0.40174,0.09392,0.03904,-0.30384,-0.71128,0.01027,0.11925,-0.54106,-0.59056,-0.04974,-0.31749,-0.11064,-0.21383,-0.3225,0.31819,0.25116,0.52229,-0.0899,0.03303,-0.15319,-0.48117,-0.87806,-0.12848,-0.21017,-0.49923,-0.47482,0.13934,-0.51174,-0.08884,0.3092,-0.22822,0.43992,0.13337,0.15512,0.55178,-0.12527,0.65232,-0.8111,-0.01603,0.10972,-0.60267,-0.293,0.51624,-0.12885,1.21518,-0.63873,0.11843,-0.38648,-0.26912,0.35792,-0.47096,-0.46666,0.02564,0.41633,-0.23206,0.23049,-0.12602,-0.17134,-0.7218,-0.00305,0.51958,-0.71072,0.31323,0.46788],[-0.67968,0.00016,0.09105,0.54,0.14349,0.15897,-0.07662,-0.24157,-0.19011,-0.48227,-0.53104,-0.37915,-0.15754,0.04482,-0.34978,0.1523,0.7089,-0.47025,-0.15168,0.14756,-0.13759,0.03094,-0.02168,-0.36826,-0.06697,0.03929,0.09463,0.35838,-0.14891,-0.12114,-0.08558,-0.02324,-0.01614,-0.33675,0.63083,0.40144,-0.04677,0.22325,-0.06117,0.17727,-0.50986,-0.7427,0.2524,0.0472,0.05712,-0.65902,0.07554,-0.28265,-0.18145,-0.00791,-0.18509,-0.26091,0.15559,-0.03276,0.37941,0.20425,0.19355,0.5119,-0.55566,-0.02666,-0.35334,-0.13761,-0.36187,0.38177],[-0.08084,-0.09837,-0.18733,0.10179,-0.21318,0.16397,0.10579,-0.58494,-0.18541,-0.31884,-0.15175,0.08015,-0.05301,0.22118,-0.044,-0.27875,-0.21699,-0.28326,-0.20257,-0.07597,0.02421,0.14267,0.16049,-0.03114,-0.25914,0.09785,-0.19977,0.04596,-0.00497,0.11859,-0.20262,-0.23879,-0.27932,-0.44431,-0.1296,-0.28532,0.05946,0.59747,0.08111,0.41745,-0.18497,-0.10726,-0.00442,-0.01048,0.3165,-0.32389,0.04665,0.19383,-0.00784,-0.16962,-0.93898,0.00938,-0.2857,-0.72899,-0.61075,-0.39967,-0.31135,0.14289,-0.45495,0.13391,-0.22936,0.19091,-0.08437,0.25956],[0.28567,-0.06021,0.60549,-0.03343,-0.36438,0.22827,0.36541,-0.23822,0.37027,-0.04449,-0.42435,0.13434,-0.33944,0.19125,0.23775,-0.08964,-0.44065,-0.0326,0.491,0.26247,-0.03251,-0.68221,-0.15236,-0.30442,-0.36438,-0.18521,0.04809,-0.93362,0.07118,0.24709,0.07026,0.83226,-0.60869,-0.05051,-0.83548,0.42658,0.53471,0.18227,-0.11744,0.00133,0.21067,0.05856,0.33658,-0.37917,-0.13507,-0.6669,-0.1551,0.39682,-0.28735,0.18274,-1.36637,-0.52838,-0.46694,-0.18583,-0.42789,0.2331,0.31177,-0.31517,-1.30745,0.24395,0.16217,-0.93814,-0.59745,0.37347],[0.02772,0.28538,-0.15975,-0.11623,0.10796,-0.29492,-0.02741,-0.14865,-0.20437,-0.00572,0.05827,-0.25777,0.06717,-0.04424,-0.24616,0.27461,0.15121,-0.20688,-0.15154,0.12791,-0.10017,-0.38342,0.14991,-0.02625,0.24136,0.02998,0.03376,0.50814,-0.03038,-0.21269,0.04052,0.21544,-0.22359,-0.21347,0.02243,-0.66489,-0.21499,0.04376,-0.10372,-0.29429,0.24985,-0.30283,-0.18581,-0.16592,-0.05011,-0.10102,-0.02871,-0.05391,-0.06258,-0.01408,-0.48557,0.07591,-0.33594,-0.44267,0.14802,-0.24534,-0.06345,-0.1494,-0.1384,0.0855,-0.24653,0.03255,0.04462,0.11029],[0.04824,0.18501,-0.05189,0.0181,0.19318,-0.28201,0.13335,0.47442,-1.18721,-0.12643,0.04067,-0.13789,0.0271,-0.15919,-0.54062,0.03867,0.22502,0.18217,0.13761,0.06473,-0.10379,0.32419,0.58012,-0.28018,0.24517,-0.12691,0.05163,0.25174,-0.18103,-0.11779,-0.01778,-0.03898,-0.16072,0.12761,0.02845,0.34747,-0.37946,0.12148,-0.08459,-0.01291,0.07996,0.24008,-0.00678,0.32156,-0.10434,0.19459,-0.22767,-0.21411,-0.00174,-0.03542,0.47284,0.09558,0.57454,-0.22549,-0.49744,0.06442,-0.16481,0.23787,-0.08797,-0.11432,-0.1282,-0.15121,-0.13452,-0.00214],[-0.22602,-0.1083,0.00799,-0.09175,-0.16505,-0.41278,0.06333,-0.01651,-0.3115,0.05898,-0.05806,0.0092,0.16709,-0.21359,0.05349,0.12089,0.06195,0.24691,0.10478,-0.13572,0.24867,-0.27326,-0.0818,-0.21977,-0.07125,0.11654,0.22942,0.03216,-0.10773,-0.19752,-0.10663,0.12659,-0.2303,0.10541,-0.07032,-0.04362,0.18172,-0.1743,0.29375,-0.24826,-0.24946,-0.28724,-0.21181,0.06622,0.06622,0.01792,0.04722,-0.29779,-0.31209,-0.03027,0.17474,-0.12251,-0.2493,-0.32339,-0.1842,0.21607,-0.11122,-0.229,-0.16437,-0.08548,-0.03281,-0.16883,-0.22171,-0.10724],[0.06658,0.12676,0.06556,-0.12728,-0.34967,-0.14116,0.0014,-0.29223,0.03053,-0.1878,-0.13464,0.17724,0.03867,0.19364,-0.1978,0.19989,0.10734,-0.52945,-0.0156,0.27263,0.07097,-0.13033,-0.04812,-0.23035,-0.00226,-0.35569,-0.17948,0.19784,-0.00364,-0.16005,-0.01872,0.45295,0.1161,-0.19384,0.23323,-0.06069,0.04709,-0.12453,-0.16579,0.12062,-0.13592,-0.13812,0.10833,-0.23718,-0.29775,0.09635,-0.34646,-0.16464,-0.09639,-0.32458,-0.23625,0.08958,0.03037,-0.19894,0.03101,0.19388,-0.2779,-0.03552,0.31811,0.10804,0.09194,-0.06713,-0.21657,0.15325],[-0.4463,-0.00911,-0.11999,0.41629,-0.32646,-0.1171,0.22465,-0.07972,-0.68369,0.86969,0.62062,-0.02636,-0.13189,-0.03579,0.63391,-0.11726,-0.49662,0.52966,0.53744,-0.18272,0.08746,-0.3593,-1.07146,0.19801,-0.06757,-0.10241,0.02692,0.46157,0.08208,-0.00584,0.00032,0.00202,0.43574,-0.4744,-1.31682,0.21369,-0.50622,-0.45381,0.16272,-0.5991,0.05963,0.40471,-0.54326,0.04157,0.73054,-0.10108,0.15354,-1.09946,-0.98006,-0.23327,0.20353,-0.25126,0.44495,0.24696,-0.26335,-0.16253,0.38121,-0.54591,0.45183,-0.14379,-0.05986,-0.8941,0.05286,-0.10561],[-0.16334,0.06654,-0.04903,-0.02947,0.02689,-0.06201,-0.47574,0.20263,0.00977,-0.00751,-0.45557,0.11032,-0.37592,-0.16958,-0.74771,0.07257,0.64672,0.43411,-0.51488,-0.28705,-0.18627,-0.07447,0.63564,-0.43905,0.32045,0.1453,0.11686,0.41396,0.28814,-0.209,0.04983,-0.30123,0.22821,-0.28493,0.29834,0.28506,-0.3804,-0.22029,0.01458,0.10831,-0.20171,-0.1746,0.20637,0.58997,0.21855,-0.1181,0.1616,0.08048,0.37918,-0.33333,0.31562,0.43127,0.47271,0.24342,0.19715,0.06822,-0.36533,0.19994,0.53024,0.04793,0.23998,0.17197,0.34482,0.23356],[0.27422,-0.18819,0.01887,-0.42063,-0.34232,-0.0132,0.33062,0.33241,0.18624,-0.00133,0.12458,-0.04976,0.10296,-0.35486,-0.14971,0.06977,0.09739,-0.54717,0.66212,-0.02017,-0.10631,0.08375,-0.47358,-0.21216,-0.18313,0.23871,0.354,-0.52248,0.16003,-0.27332,0.05018,0.10706,0.26798,0.17355,-0.22694,-0.5685,-0.02787,0.13888,0.08895,-0.00118,-0.00357,-0.07126,-0.29702,-0.23756,0.08466,0.02987,0.1862,-0.96621,-0.46604,-0.63623,0.03736,0.00189,-0.21606,-0.1664,0.10679,-0.13859,0.05544,-0.3171,-0.64058,-0.06327,-0.56084,0.03023,-0.03585,-0.25293],[0.03308,-0.03819,-0.19094,0.04802,-0.08569,-0.24219,-0.73811,-0.1255,-0.42844,0.01944,0.06349,-0.14857,0.09448,0.13207,0.10611,-0.30934,-0.43342,0.03624,0.05676,0.23274,0.03824,-0.09352,-0.07219,0.04458,-0.04772,0.00252,-0.26033,-0.30413,0.2128,0.01509,-0.21401,-0.07365,-0.4203,-0.33399,0.19731,0.05408,-0.03587,0.10356,-0.06842,-0.23072,-0.06644,0.31297,-0.19277,-0.41387,0.00985,0.19485,0.03924,-0.29844,0.04611,-0.17349,-0.58297,-0.91932,-0.56267,-0.4444,0.0343,0.51866,-0.4878,0.10513,0.00612,-0.0108,-0.2601,-0.06313,0.19972,-0.53989],[-0.74758,0.24468,0.54008,-0.53829,-0.09222,-0.14004,-0.80724,-0.15371,-0.86066,-0.74623,-1.14745,-0.16797,0.15374,-1.36102,-0.07897,0.11888,0.36372,0.34105,-0.86724,-0.28483,-0.93456,-1.05889,-0.306,-1.29284,0.50531,-1.11588,-0.00694,0.4394,0.19709,-0.44036,-0.04613,-0.4193,0.32707,-0.99682,0.2722,0.05841,-0.53858,-0.2683,0.16454,-0.13424,-0.97041,-0.96633,-0.00815,0.32135,1.2007,0.30908,0.19525,-1.23215,0.35543,-0.97374,0.41886,0.07121,0.74164,0.7043,0.67185,0.74967,-0.89939,0.62872,0.16849,0.0322,0.01147,-0.68118,0.20373,-0.48598],[0.16613,-0.02284,-0.57714,-0.09641,-0.10106,-0.09007,0.16363,0.14716,-0.2505,-0.3886,0.45219,-0.37982,0.42725,-0.13882,-0.62148,0.45956,-0.64893,-0.68926,-0.35198,-0.14379,0.31359,-0.2462,0.30633,0.3198,-0.20356,-0.10447,-0.31478,-0.43145,0.03936,0.36997,-0.03342,0.1606,0.28258,-0.02942,0.01875,-0.22073,0.051,0.2988,-0.1322,-0.14656,0.22228,0.80401,-0.33482,-0.48058,-0.28988,-0.13444,0.12949,0.00678,-1.07257,0.06072,-0.50883,-0.01576,-0.57637,-0.30602,-0.56516,-0.02278,-0.22308,-0.30683,-0.66541,0.09778,0.12619,-0.33782,-0.03274,-0.43007],[-0.36677,0.0352,0.11786,-0.10283,-0.31486,-0.09614,0.20944,0.34485,0.01582,-0.14977,-0.37956,-0.33599,-0.01571,0.03991,0.01377,-0.04649,-0.33591,-0.27868,-0.00571,-0.14576,0.19901,-0.28937,0.26648,-0.18121,-0.02395,0.0104,-0.06081,-0.38763,-0.08528,0.23747,-0.22641,-0.32564,-0.0704,-0.13622,-0.26006,-0.19614,-0.11458,-0.10473,0.02877,0.09317,0.005,0.02865,0.2344,0.1303,-0.54653,-0.0642,-0.2787,-0.18505,0.10488,-0.06705,-0.13897,0.23281,-0.29756,-0.04831,0.06534,-0.02746,-0.26893,-0.03574,0.11114,0.06315,-0.00715,0.02269,-0.00778,-0.25118],[-0.06825,0.07616,-0.55057,0.09493,0.03716,-0.19166,-0.14564,-0.06044,0.07309,-0.06612,0.2063,0.04929,-0.13905,-0.10482,0.02302,0.12876,0.09991,-0.03062,0.01273,-0.00444,0.12546,-0.19845,0.10657,-0.32746,0.06599,0.02523,-7e-05,-0.377,0.27696,0.13236,0.0045,0.06187,-0.18325,0.07312,0.25192,-0.24692,0.45066,-0.0964,0.14627,-0.14604,0.04541,-0.23882,-0.14831,-0.05415,-0.13692,-0.06032,0.17253,-0.22576,-0.22966,-0.01635,-0.11345,-0.17744,0.00728,-0.09977,0.03286,-0.02847,-0.06431,-0.02546,0.16718,0.2323,-0.04648,-0.20551,-0.28975,-0.42247],[-0.84965,-0.15067,-0.11913,-0.59498,0.29036,0.0729,-0.38734,-0.0637,0.01135,-0.15465,0.20525,0.10415,-0.0908,-0.01362,0.87389,-0.01622,-0.05059,-0.3895,1.4957,0.05721,-0.6136,-0.15083,0.7124,0.1219,0.04013,0.02757,0.04136,-0.11867,0.21682,0.18648,0.13444,-0.09462,0.33688,-0.21088,0.45848,-0.68787,0.37816,0.27347,-0.09793,0.17987,-0.52353,0.51147,-0.89246,0.0794,0.28176,-0.00398,0.23488,-0.54469,-0.14179,-0.19769,-0.14256,-0.9299,-0.07413,0.32973,-0.66081,0.27064,-0.13471,0.33136,-0.03999,0.02768,0.0983,-0.04233,0.0689,-0.03908],[-0.21622,-0.15391,0.11202,-0.00556,-0.17765,-0.11624,-0.02805,-0.11324,0.11429,-0.23752,0.0448,0.2339,0.0356,-0.19191,-0.16318,0.00772,-0.11506,0.18419,-0.32534,0.2581,-0.36266,-0.0429,-0.19144,0.11323,-0.17215,-0.23552,-0.06011,-0.06194,-0.34207,0.04859,-0.42296,0.17619,-0.09191,0.1368,-0.14387,-0.18398,0.08345,-0.13947,-0.27358,-0.01539,-0.27973,-0.00228,0.20641,0.13478,-0.0359,-0.06518,-0.056,-0.14446,0.05799,-0.05967,-0.06748,0.04774,-0.36048,0.31018,0.07482,-0.27811,-0.02344,-0.23132,-0.13003,-0.15823,0.15607,-0.37123,-0.09827,-0.3353],[0.15406,-0.05616,-0.49359,0.4217,0.21517,-0.46309,-0.03123,-0.1619,0.68705,0.12839,-0.07162,-0.16589,-0.05095,-0.16741,0.32731,0.04865,0.45277,-0.70728,0.58954,-0.02766,-0.38389,-0.23982,-0.61588,0.27368,-0.1782,-0.14919,-0.1231,-0.53194,-0.38408,0.21539,0.14925,0.16511,-0.41055,0.29519,0.42836,-0.26274,-0.19673,0.36097,-0.33073,-0.3047,-0.09192,0.31478,-0.39767,-0.0799,-0.48961,0.33825,-0.17741,0.17883,-0.77677,-0.03415,-0.49497,-0.2174,0.10843,-0.86554,-0.38537,-1.42972,0.16875,-0.11653,-0.2624,-0.0614,-0.11263,0.76231,0.34961,-0.26074],[-0.87439,-0.19052,0.62266,-0.37915,0.04474,-0.68711,-0.85761,0.04607,-0.55407,-0.73936,-0.5215,-0.10878,-0.09826,-1.94338,-0.00666,0.06527,0.46064,0.49232,-0.5164,-0.04294,-1.53214,-0.87736,-0.55415,-1.03878,0.03774,-0.90113,0.37572,0.22834,-0.06073,-0.6587,-0.26051,-0.38139,1.13276,-1.09025,0.19714,-0.18067,-0.44574,-0.76643,0.04728,0.15953,-0.69634,-1.3993,0.53855,0.50454,1.21383,0.10534,-0.11291,-2.20659,0.25218,-1.01168,0.47342,0.30085,0.66857,1.1192,0.0851,1.23645,-0.9762,0.41548,0.33059,-0.007,0.13637,-0.72282,0.33494,-0.12297],[-0.7761,0.0221,0.71821,-0.21795,-0.40702,-0.34814,-0.48813,-0.01081,-0.81614,-0.52498,-0.94455,0.25396,-0.05678,-1.21111,0.03353,0.00545,0.2439,0.55193,-0.75743,-0.2793,-1.26788,-1.03902,-0.4696,-1.36076,0.39568,-1.02056,-0.15144,-0.13906,0.21697,-0.13616,0.05625,-0.61831,0.50174,-0.90897,0.12876,0.17118,-0.28639,-0.38144,0.3622,0.02576,-0.57454,-0.31357,0.16638,0.15746,0.96642,0.28366,-0.21337,-0.83796,0.17967,-0.71152,0.12898,-0.16454,0.1046,1.01723,0.20779,0.26905,-0.33331,0.56944,0.12387,0.05447,0.42621,-1.05281,0.19292,-0.18594],[0.50892,-0.09021,0.07393,-0.35214,-0.25495,-0.109,-0.07522,-0.34367,0.624,0.1842,0.2707,-0.16568,-0.14826,-0.20992,0.06177,0.13615,-0.23935,-0.5728,0.22168,-0.14932,0.54187,0.24656,0.31577,-0.09698,-0.04958,-0.17052,0.39267,-0.06874,-0.17242,-0.77708,-0.10559,-0.17786,0.02803,0.60906,0.30661,0.09101,0.58615,-0.72416,0.03151,0.10929,0.54733,-0.04534,0.08472,-0.22012,-0.43679,-0.12326,0.31682,0.13761,0.52337,-0.04329,-0.02762,0.24192,-0.27953,0.47539,-0.02196,0.19462,0.12605,-0.81378,-0.09105,0.07805,0.33573,-0.5112,-0.62014,0.51727],[-0.04826,0.05633,-0.0471,-0.12246,-0.28164,-0.24169,0.29986,-0.04596,-0.2431,-0.18826,0.11379,-0.1673,-0.11055,-0.28065,-0.25576,0.29152,-0.05322,-0.09538,-0.10166,0.12595,-0.0258,0.00842,-0.01122,-0.13073,-0.13121,-0.35543,-0.08693,0.33073,-0.2191,-0.05129,0.05935,0.18158,0.44182,-0.07125,-0.13138,0.17728,0.0097,0.28588,0.12822,-0.14068,-0.06475,0.07806,0.07562,-0.25401,-0.38707,-0.31067,0.1091,-0.11803,-0.3459,-0.14634,-0.37061,-0.06006,-0.19152,-0.12261,0.0048,0.00675,0.0012,0.1588,0.39677,0.15061,-0.0624,0.07954,-0.15508,-0.1564],[0.11892,0.05168,-0.28879,0.4229,-0.0641,0.10295,-0.18396,-0.26386,0.67663,-0.13282,0.16307,-0.69123,-0.12624,-0.13615,0.27739,-0.32045,0.10383,0.19136,-0.55296,0.31076,0.07977,-0.47171,-0.39142,0.26894,-0.26334,-0.79159,0.1371,0.04048,-0.1624,0.10866,-0.18474,0.30827,0.45101,-0.09027,0.51249,-0.20537,-0.00814,-0.44532,-0.05233,0.10898,-0.18705,0.54719,0.33813,-0.31371,0.54422,0.00046,-0.38586,0.19181,-0.60722,-0.00596,-1.04031,-0.32712,-0.04035,0.44817,0.08352,0.12524,0.21185,-0.29608,-0.21629,0.18247,0.58388,-0.27084,0.3546,0.2865],[-0.02649,0.15755,-0.19479,-0.31965,0.23921,-0.16124,-0.03489,-0.05059,-0.27105,-0.04154,0.3893,0.18304,-0.05267,0.13641,-0.22456,-0.23698,0.0169,-0.19875,-0.85786,-0.15149,0.24532,0.47536,-0.42444,0.36713,0.05447,0.29861,-0.16761,-0.08737,-0.10356,-0.24685,0.12384,0.21633,-0.09193,-0.67323,-0.05142,0.6779,-0.19636,0.31634,-0.05266,-0.08055,0.23323,0.57979,0.13442,-0.02129,-0.76778,-0.05342,0.02231,0.14772,0.54487,0.25629,0.26699,-0.19209,0.03401,-0.45038,-0.30453,0.01832,0.15206,-0.15983,-0.22698,0.28181,-0.28637,0.19634,-0.16062,-0.03644],[-0.05879,0.1261,-0.14772,-0.04815,-0.40226,0.08105,0.19549,-0.44412,0.23703,-0.16745,0.16982,-0.72389,0.18719,0.07445,-0.43991,-0.17206,-0.43946,0.41593,-0.4223,-0.16028,0.1777,-0.20791,-0.57044,0.38072,0.16062,-0.23922,-0.11814,-0.06076,0.06069,0.35386,0.11557,0.02071,0.42766,-0.11746,0.16666,-0.53246,-0.50942,0.35293,-0.18612,-0.47786,0.08949,0.29391,-0.00481,-0.03438,0.09474,-0.11606,-0.17862,0.06775,-0.79297,-0.1608,-0.06428,0.27953,0.18267,0.2831,-0.26797,-0.34782,-0.06947,-0.35689,0.16905,-0.07223,-0.00732,0.73693,0.19397,-0.32741],[-0.05046,-0.09669,-0.12966,0.28206,-0.29035,-0.0285,-0.14176,-0.0864,0.11911,0.17567,-0.03282,0.12979,-0.13551,0.05483,0.30653,-0.1021,-0.02695,0.20681,-0.17955,0.01137,-0.0637,-0.2055,0.07146,-0.14922,0.22439,-0.00547,-0.03715,-0.03255,0.01817,-0.03522,0.01012,-0.10962,-0.09634,0.02563,-0.4474,-0.20444,0.00151,-0.00436,-0.06904,0.01603,-0.11295,-0.38521,0.15058,-0.02112,-0.23009,0.19237,0.11977,-0.11057,0.12607,0.09529,0.07805,-0.16669,-0.16763,-0.17803,-0.16137,-0.4089,0.12474,-0.27351,0.02934,-0.22949,-0.01893,-0.21883,-0.04321,-0.34528],[-0.09996,0.11661,0.03781,-0.04421,-0.18535,-0.39894,-0.18894,-0.10814,0.27316,0.0141,-0.01581,-0.17627,-0.12892,0.15345,-0.06577,-0.05956,0.32051,-0.14279,-0.05454,-0.04414,-0.175,-0.30423,0.25773,-0.27964,-0.1892,0.03089,-0.21986,-0.00382,-0.04536,-0.04307,-0.02476,-0.24898,-0.14593,0.19991,0.22571,-0.17314,0.19178,-0.17278,-0.24112,-0.35368,-0.21807,0.09021,-0.09528,0.27093,0.13224,-0.05326,-0.03947,-0.12239,0.15981,-0.20684,-0.01298,-0.06877,0.38476,-0.14629,-0.02452,-0.29512,0.13197,-0.10909,-0.00449,-0.07256,-0.15795,-0.37654,-0.19089,-0.23092],[-0.45156,0.23809,0.14284,0.44223,0.25575,-0.08986,-0.38586,0.14106,-0.92678,-0.7145,-0.36954,0.44011,-0.06207,-0.19605,-0.19764,-0.10346,0.28618,0.5442,-1.01928,0.18309,-0.67853,-0.14227,0.08458,-0.56437,0.23572,-0.03089,-0.23912,0.3883,0.32959,-0.22527,-0.11335,0.03819,0.03957,-0.60372,0.28151,0.33027,-0.51042,0.20981,0.03297,-0.03416,-0.21585,-0.0255,0.55489,0.27052,0.00992,-0.07749,-0.16301,-0.46492,-0.00716,-0.05339,0.68872,0.56764,0.70744,0.063,0.4213,-0.29464,-0.26478,0.44418,0.08383,0.29327,-0.56972,-0.00648,0.37602,0.04442],[-1.01694,-0.33566,0.4351,0.08874,-0.22267,-0.40232,-1.05348,0.10989,-0.38311,-0.69198,-0.4376,-0.24128,-0.05905,-1.2604,-0.20014,0.05132,0.32388,0.48586,-0.36962,-0.38847,-0.96015,-0.73326,-0.27539,-0.91726,-0.00101,-0.75931,0.07232,-0.0171,0.29265,-0.45474,-0.10519,-0.64671,0.54167,-1.10789,0.17057,0.41958,-0.41242,-0.18402,-0.21065,-0.22662,-0.57643,-1.08593,0.51307,0.43369,0.73095,0.22759,0.29038,-1.38835,0.00462,-0.4763,0.60455,0.09219,0.44199,0.67825,0.79778,0.60165,-0.48721,0.22684,0.13925,-0.11139,-0.14891,-0.53457,0.11804,-0.01955],[-0.09718,-0.21086,0.28155,-0.22111,-0.02922,-0.20592,-0.10591,-0.03738,-0.00111,-0.2026,-0.04443,0.03221,0.26237,0.09034,0.16786,0.1119,-0.1627,-0.08796,0.13062,-0.12152,-0.22062,-0.0283,-0.32138,-0.16892,-0.27151,-0.09564,0.23199,0.38514,0.10484,-0.19244,0.12924,0.04833,-0.12749,0.12612,-0.11512,-0.14663,-0.00812,0.06609,-0.06511,0.03316,-0.3713,0.02203,-0.11398,-0.1637,-0.47611,-0.25619,-0.30857,0.08573,-0.18396,0.02863,0.0627,-0.12623,-0.23833,0.19206,0.01667,-0.23585,0.05528,-0.16989,0.04469,0.14605,-0.17013,0.07193,-0.55469,0.06707],[-0.67309,0.44646,0.15312,0.22846,-0.13617,-0.47114,0.04781,-0.29989,0.541,0.31825,0.53108,-0.83814,0.01989,0.05801,-0.03358,0.14772,-0.19592,0.07651,-0.97985,0.0024,0.00844,-0.41575,0.02096,0.52738,-0.08301,-0.08993,0.16118,0.31048,0.09145,-0.14707,-0.1875,-0.04286,0.33973,-0.03941,-1.40221,-0.31033,-0.3395,-0.10289,-0.11076,0.14307,-0.00934,0.44573,-0.03513,0.03243,0.27413,0.03682,0.20939,-0.48616,-0.98142,0.0561,-0.09111,0.08263,0.3154,0.10801,-0.05802,-0.28137,0.36992,-0.61104,0.37433,-0.12582,0.13878,0.25987,-0.15419,-0.09974],[-0.05023,0.09912,0.68787,-0.1508,-0.43305,-0.47024,-0.21727,0.17353,-0.50343,-0.01626,-0.15857,-0.03645,0.06153,0.09882,0.11201,-0.30075,0.2272,0.04468,-0.21682,0.15055,0.47907,-0.00859,-0.12679,-0.32938,-0.78214,0.14723,-0.01521,-0.45126,-0.09028,0.53633,-0.14954,0.52052,0.25112,-0.96574,-0.2786,-0.23589,0.09229,-0.33303,-0.15861,-0.60489,-0.77944,0.26875,-0.68465,-0.74367,-0.31008,-0.29616,0.23312,-0.62817,-0.2026,-0.08261,-1.2655,1.52,-1.17109,-0.95239,-0.47304,0.81225,-1.51968,-0.41084,-0.1108,0.18739,-1.06936,0.40299,0.2155,-0.96217],[-0.20047,0.10658,-0.17319,-0.28548,-0.1242,0.20909,-0.32136,-0.23836,-0.29903,-0.27625,-0.0895,-0.29635,0.05487,-0.04466,0.06693,0.33942,-0.17474,-0.11513,-0.10683,-0.11107,0.03967,0.04279,-0.15227,0.17201,-0.1109,-0.08348,-0.15732,0.08718,0.13182,-0.06276,-0.3806,-0.10559,0.10488,-0.07377,-0.0171,0.0274,-0.38381,0.07775,-0.33476,0.01689,0.03831,-0.08873,0.05268,0.0269,-0.15429,-0.07502,0.14211,-0.00921,0.10615,0.00954,-0.10064,-0.18685,-0.21111,-0.26679,-0.4172,-0.1043,-0.22223,-0.02006,-0.04036,0.06596,0.13572,-0.17341,-0.04424,-0.13043],[-0.29551,-0.2109,0.50088,-0.68443,-0.20314,0.16202,-0.82616,0.18563,-0.26551,-0.66746,-0.22105,-0.20414,0.08168,-0.59651,0.05966,0.14705,0.54227,0.3717,-0.44421,-0.14443,-0.73496,-0.22836,0.08369,-0.56339,0.4273,0.10231,0.1223,0.58915,-0.15335,-0.78221,0.02472,-0.15863,0.81315,-1.6678,0.172,-0.52696,-0.59866,0.23358,0.18095,0.91331,-1.2571,-1.28013,-1.38664,0.6088,0.58663,-0.03425,0.44823,-1.78059,0.32038,-1.32549,0.22445,0.95037,1.66235,0.03729,-0.13337,1.17446,-1.51404,0.60053,0.3411,-0.1427,-1.09763,-0.47118,0.53124,-1.08089],[-0.24098,0.08056,-0.1386,-0.17852,0.25175,0.10935,-0.04726,0.25208,-0.87683,-2.3823,0.13004,0.21444,-0.04832,-0.27067,-0.20818,0.00185,0.54248,0.57226,-0.41223,0.25982,-0.52865,-0.15756,-0.80463,-0.50573,0.16046,-0.39406,0.19875,0.23846,0.09681,-0.84584,0.45239,0.19908,0.03268,-0.48578,-0.18055,0.23173,-1.98821,-0.17726,-0.1325,-0.49148,-0.14235,0.35434,0.15317,0.18495,-0.11082,0.39379,0.10685,-0.27256,0.36889,0.08234,0.37758,0.26602,0.35672,-0.30016,0.06532,0.07626,-0.24602,0.03121,-0.07759,0.15049,-1.31319,-0.19108,0.2819,-0.14992],[-0.64569,-0.27421,-0.04342,0.3183,0.08786,0.15059,0.2229,0.17003,0.09072,0.36815,0.6152,-0.74613,0.04595,-0.26557,-0.26695,-0.03761,-0.82773,-0.3723,-0.30146,0.16609,0.29004,0.19682,-0.48844,-0.12997,-0.19178,-0.39857,-0.05299,-0.15473,-0.21173,0.1797,-0.25495,-0.13947,0.03468,0.50199,-0.03095,-0.12825,-0.22562,0.25972,-0.39592,0.23965,-0.41506,0.69182,-0.35924,-0.2233,0.16692,-0.18747,-0.12723,0.06975,0.3515,0.16632,0.12522,-1.03547,-0.69054,0.13072,0.15594,0.0901,-0.09237,-0.21165,-0.11194,-0.04867,0.16477,0.20688,-0.38016,0.42383],[0.22977,-0.03018,0.14375,-0.26289,-0.13197,-0.02951,-0.20024,-0.20713,-0.16853,-0.2994,0.04264,-0.04506,0.08826,-0.16525,-0.4568,0.16074,0.22199,-0.41708,0.31333,-0.275,-0.27121,-0.19217,-0.40108,-0.53433,-0.88928,-0.19808,0.15458,-0.37194,-0.35861,-0.05537,0.229,-0.02035,0.0755,0.33618,-0.12806,-0.24457,0.00454,-0.56511,0.29279,0.15455,-0.44078,-0.46998,0.51314,-0.46565,-0.34242,-0.47227,-0.0251,-0.21297,-0.33145,-0.07754,-0.74703,0.22341,-0.288,-0.52934,-0.17759,0.72958,0.04949,-0.53926,-0.99645,0.06034,0.02704,0.05537,-0.16922,-0.31474],[-0.82592,0.23429,0.4606,0.19017,0.05005,-0.131,-0.26537,-0.00485,-0.06499,-0.56294,-0.40718,-0.6761,0.19517,-1.05794,-0.25239,0.08712,0.31019,0.22807,-1.06099,0.03635,-0.37649,-0.68538,0.13813,-0.68635,0.11861,-0.54992,0.01836,0.28296,-0.14927,-0.59532,0.14162,-0.27042,0.20024,-0.68413,0.10957,0.23083,-0.49869,-0.01863,-0.19601,0.71047,-0.08823,0.29623,0.43983,0.14498,0.60387,-0.2074,-0.03908,-0.85799,-0.07687,-0.45252,-0.03789,0.18028,1.11654,-0.06434,0.78009,0.43931,-0.16109,0.2933,0.25149,-0.21103,-0.31008,-0.81033,-0.16416,0.24868],[-0.48659,0.27884,0.44851,-0.41159,-0.26966,-0.06435,-0.01065,-0.07941,-0.51011,-0.67209,-0.52418,0.09359,-0.26621,-0.45978,0.22873,-0.18042,-0.32823,0.02645,-0.89076,-0.04468,-0.60411,-0.95299,-0.68437,-0.1953,-0.05429,-1.02261,-0.16329,-0.60738,-0.06622,0.04199,-0.06109,-0.45748,0.28927,-0.23611,0.2631,-0.18213,-0.28923,-1.11361,0.21024,-0.58225,-0.31634,-0.00624,0.25179,-0.05367,0.90815,-0.92065,-0.00016,-0.41326,0.07672,-0.50776,0.40563,-0.3319,-0.92795,0.96657,0.05351,0.65314,-0.46982,0.52677,0.26584,0.40992,0.48257,-0.92117,-0.18147,-0.38524],[0.13246,-0.35553,-0.31952,-0.8684,-0.14904,0.29512,0.42573,-0.1931,0.05193,0.54988,-1.1639,-0.09289,-0.01968,-0.36234,0.24935,-0.18293,-0.85054,0.30326,0.54769,-0.06549,-0.51194,0.33899,-0.62781,-0.75041,0.42633,-0.88985,-0.19957,-0.41049,-0.22072,-1.06339,0.17065,-0.65899,-0.28383,0.1913,-0.09579,-0.44289,0.21224,-0.10206,0.13267,-0.13951,0.14156,-0.19772,-0.08049,0.0111,0.37177,0.01347,-0.11549,-0.03325,0.38492,-0.87682,0.26422,-0.33895,-0.39234,1.0797,0.02162,-0.5047,-0.09302,0.1538,-0.50732,0.0383,-0.11761,-0.49022,-0.35604,-0.34911],[0.14978,-0.09164,0.22098,-0.31866,-0.43537,0.45627,0.28155,-0.58317,0.03105,-0.19329,-0.06302,0.06893,0.19817,0.06731,-0.47189,-0.13358,-0.32318,-0.1861,0.08627,-0.56836,0.44448,-0.51909,-0.07195,-0.29656,-0.2747,-0.1437,-0.36374,0.26081,-0.17064,0.10862,-0.27206,-0.00922,0.41644,-0.69294,-0.66423,-0.31112,-0.26715,-0.00082,0.15207,0.50883,-0.3337,-0.04162,0.08176,0.087,0.01666,-0.18716,0.31672,-0.53918,-0.33549,-0.53278,-0.22941,0.40427,0.39669,0.03011,-0.44481,0.28936,-0.0498,-0.13462,0.07966,-0.18465,0.0224,-0.22101,0.01977,-0.07529],[-1.53839,-0.11136,0.58283,-0.77448,-0.16747,-0.79878,-1.77266,0.33896,-1.14867,-1.12403,-1.28095,-0.59099,-0.04268,-1.56082,0.3409,0.03581,0.57805,0.96506,-0.48687,0.0072,-1.14941,-0.22356,0.06959,-1.17264,0.33821,-0.33107,0.04907,0.56471,0.05616,-0.87503,-0.14151,-0.73292,1.27356,-1.9704,0.24475,-0.31437,-0.63472,-0.19093,0.07124,-0.11275,-1.64219,-1.79216,0.27831,0.3544,0.95082,0.29981,0.1132,-2.69706,-0.02547,-1.00168,0.68613,0.52913,1.02774,1.1836,0.76356,1.48699,-0.87766,0.7095,0.73739,-0.08703,-0.60717,-0.11855,0.62877,0.03229],[0.26578,0.12498,-0.1,0.24569,-0.06037,0.03325,0.00987,0.41382,0.20988,-1.29941,-0.57653,0.24105,-0.13785,-0.38714,-0.00232,0.06356,-0.06483,0.19521,-0.4976,0.1372,0.22179,-0.89236,-0.73986,-0.15058,-0.11591,-0.19344,-0.10783,-0.41867,0.09088,0.67918,-0.13178,-0.55114,0.23664,0.7332,0.72826,-0.99861,-1.06967,0.56341,-0.0512,-0.23033,-0.18933,-0.40585,-0.74047,0.22814,-0.08585,0.481,0.06991,-0.38295,-0.59644,-0.52161,-0.52142,-0.48387,0.49583,-0.02355,-0.14672,0.36525,0.40807,0.36266,0.24125,0.01901,-0.06355,0.50403,0.44964,-0.10411],[0.08241,-0.00674,0.31831,0.516,-0.26575,-0.23222,-0.22344,0.27943,-0.11326,-0.14636,0.0526,-0.35042,-0.11306,-0.03475,-0.07268,0.06151,0.17691,0.01885,-0.08498,0.01545,-0.00857,-0.19156,0.05323,-0.012,-0.24887,0.00966,-0.04159,-0.22316,0.19716,0.38594,0.12557,0.30674,0.00013,-0.20837,0.31474,-0.09789,-0.06548,-0.00255,0.08373,0.05081,-1.01143,0.70736,-0.7739,0.02659,0.2859,-0.09185,0.09595,-0.36412,0.04565,-0.03534,-0.54435,-0.56422,-0.21727,-0.66587,-0.18037,0.05485,-0.45674,-0.34967,0.06846,0.40399,-0.37523,0.51404,0.04173,-0.36526],[0.11954,-0.00649,-0.12385,-0.32055,0.04437,-0.02194,-0.34689,-0.29715,-0.18725,-0.16847,-0.25947,0.11693,-0.16816,-0.16895,-0.25776,0.12213,-0.06945,-0.04988,0.0977,-0.00182,-0.07757,0.06226,0.06318,-0.00034,-0.11911,-0.0791,-0.12713,0.21766,0.05016,0.00461,-0.11337,-0.05121,0.11225,-0.36155,-0.09206,-0.12141,-0.22725,0.03446,-0.13575,-0.1624,0.11447,-0.36548,0.14037,0.13445,-0.39154,-0.1312,0.0507,0.1091,-0.10986,-0.12402,0.08597,-0.24637,0.01646,0.16319,-0.22344,0.0243,0.0045,-0.2296,-0.02624,-0.04555,-0.2054,-0.08644,-0.21017,0.05986],[0.09993,0.13374,0.01285,-0.17275,0.16464,-0.00304,-0.0894,0.21871,-0.94636,-0.09184,-0.0922,0.13639,0.15133,-0.30627,-0.50836,-0.26567,0.26071,-0.0997,-1.70669,0.00975,-0.53581,0.1246,-0.51639,-0.39641,0.51523,-0.19806,-0.10082,0.44529,-0.17912,-0.25675,-0.00179,-0.33301,0.42304,-0.05092,0.32284,0.23774,-0.52983,0.21392,0.12948,0.28298,0.11325,-0.12827,0.32186,0.68826,0.31595,0.11426,-0.23619,0.06121,0.41892,-0.00997,0.94009,0.24034,0.53273,0.4489,-0.01017,0.20243,-0.05958,0.36446,0.25005,-0.26084,-0.01703,-0.46762,0.28223,-0.29379],[0.9245,0.11673,0.1407,-0.60408,0.33837,0.30519,-0.20607,0.13244,-1.76014,0.61333,0.49848,0.16378,0.15385,-0.02957,0.35227,0.37198,-0.27721,-0.00616,-0.39323,0.34521,-0.26824,0.66422,0.58685,-0.1602,0.11066,0.58293,-0.01546,0.07422,-0.07137,-0.53974,0.29988,-0.11507,-0.5206,-1.3622,-0.72272,0.80823,0.70682,-0.22287,-0.08481,0.08447,-0.05283,0.76912,0.65219,-0.1332,-0.0687,0.14564,0.33493,-0.46998,0.99572,-0.04095,-0.38159,0.10871,-0.27587,0.32136,0.26881,0.07029,-0.51739,0.08676,-0.30571,0.1014,-1.02831,-0.93478,-0.16947,-0.06199],[0.05158,-0.06478,0.22152,0.19505,-0.04408,-0.41519,-0.1668,-0.07425,0.51924,-0.53135,-0.11404,-0.53344,-0.228,0.02888,0.12329,-0.13863,-0.44761,-0.8272,0.06631,-0.08812,0.08057,-0.25519,-0.13769,-0.32048,0.07258,-0.04581,0.04281,-0.46972,0.07827,-0.5018,0.37604,-0.13723,-0.46929,0.5138,0.70786,0.03145,0.1417,0.27001,-0.11752,-0.97844,-0.07544,0.10057,-0.13098,0.43766,-0.20464,0.07194,-0.14838,-0.50461,-0.05136,-0.22693,-0.10582,0.01885,-0.25412,-0.52734,-0.00237,0.40067,0.40212,-0.29589,0.05405,0.1844,-0.37975,0.00083,-0.2985,-0.40014],[-0.04425,0.0016,-0.21126,-0.00025,-0.07775,-0.20506,0.09977,-0.14838,-0.06885,0.13995,-0.14384,0.21592,0.08334,-0.17879,-0.25667,0.01438,-0.16112,-0.24019,-0.22473,-0.09166,-0.11578,-0.00315,-0.22115,-0.12524,-0.1418,-0.16488,0.23015,0.01635,0.37948,0.10826,0.06558,0.22202,0.17538,-0.31779,-0.14212,-0.03991,0.01918,0.01808,-0.27284,0.03513,0.04744,-0.15897,-0.20654,0.06916,-0.10997,0.15024,0.17899,0.03487,-0.28516,-0.18878,-0.35513,-0.09005,-0.1889,0.24467,0.08237,-0.07567,-0.24736,0.28752,-0.18668,-0.35629,-0.16463,-0.25469,0.11265,-0.18149],[0.894,0.26613,0.05288,-0.69787,0.06562,0.3353,-0.37468,-0.03969,0.47238,-0.24855,0.302,0.30592,-0.1594,0.03378,-0.3092,-0.05461,0.30776,0.22335,-0.57028,0.04639,0.02275,0.13659,0.19879,0.00635,-0.01197,0.28823,-0.04955,0.44052,-0.08177,-0.4788,0.09741,-0.23238,-0.0865,-0.05702,-0.28614,-0.2712,-0.19721,-0.03079,-0.06372,0.35803,-0.11099,-0.08176,-1.57617,0.37073,-0.66559,0.37084,-0.0319,-0.23625,-0.03203,-0.50956,-0.13896,0.38336,0.76594,-0.77029,-0.51796,-0.23989,-1.62956,0.31022,0.26361,0.35442,-0.92205,0.09239,0.18695,-1.4694],[-0.16157,-0.1123,-0.30351,-0.53241,-0.04163,0.35443,-0.11483,-0.11775,0.05505,-0.18187,-0.15436,-0.25474,-0.16416,0.12708,-0.18227,0.03576,-0.0933,-0.20811,0.0549,0.14612,-0.24772,0.02998,0.10729,-0.11762,-0.07726,-0.03084,0.03599,-0.26171,-0.09119,0.00975,-0.13412,-0.047,-0.0444,-0.13781,-0.00799,0.19991,-0.20322,-0.17188,-0.02835,-0.24461,-0.16969,-0.26225,-0.3613,-0.00403,0.11632,0.27533,-0.02845,0.10546,-0.08352,-0.19315,0.08237,-0.07587,0.11639,0.01997,-0.20423,-0.19463,-0.21473,-0.17962,0.1287,-0.0199,0.18808,0.09645,-0.06315,-0.18303],[-0.66858,0.19179,0.10594,-0.39103,0.31343,-0.26257,-0.30264,0.02458,-1.22729,-0.69822,-0.4124,-0.42639,-0.01381,-0.57716,0.00898,0.11385,-0.17142,-0.04711,-0.77011,0.20871,-0.49629,-0.56034,-0.04245,-0.61833,-0.07814,-0.54956,0.09844,-0.0589,-0.00514,-0.24499,0.12819,-0.33407,0.42423,-0.503,-0.08427,0.24275,-0.09802,-0.27679,-0.23949,0.61472,-0.18213,0.74863,0.19472,0.24297,0.55797,-0.07237,0.02652,-0.56835,0.20852,-0.19399,0.39182,-0.32257,0.22466,0.60996,-0.32741,0.30738,0.07415,-0.14592,0.0877,-0.02015,0.00994,-0.50666,0.16259,-0.4268],[-0.2911,0.31286,-0.14728,-0.28007,-0.05381,-0.05546,0.15026,-0.20992,-0.12746,0.1351,-0.12713,0.12229,0.19008,0.28992,0.3714,-0.12777,-0.18577,-0.16145,-0.03261,-0.02223,-0.0383,-0.23462,0.1983,-0.26204,-0.14477,0.1105,0.11089,-0.03659,0.16826,-0.09005,0.35038,0.18533,-0.13235,0.09162,-0.06835,0.01011,0.18463,-0.2065,0.24846,-0.10833,0.13496,0.02163,-0.127,-0.26978,-0.24604,0.05255,-0.19221,-0.08743,-0.04356,-0.14501,-0.10866,0.04718,0.13685,0.08252,0.05331,0.09446,-0.13785,-0.02505,-0.29884,0.01433,-0.10721,0.21877,-0.3601,-0.24944],[0.18539,0.12992,0.06346,-0.2508,-0.39008,-0.04301,-0.0938,-0.14028,0.10055,0.38741,-0.12802,-0.21259,-0.39006,0.04505,-0.33045,-0.22465,-0.02838,-0.34469,-0.04113,0.31339,0.14834,-0.19296,0.27743,-0.31084,-0.28525,0.28271,-0.18763,0.19567,-0.06283,0.11624,-0.07548,-0.19046,-0.12723,0.10575,-0.09566,0.14698,-0.39195,-0.07819,-0.04762,-0.11033,-0.22127,-0.30757,-0.1827,0.05014,0.46339,0.15533,-0.06549,-0.44038,-0.39808,-0.06451,0.03791,0.08098,-0.17666,-0.00836,-0.1984,0.1848,0.10897,0.04644,-0.08414,-0.17664,-0.02816,-0.37383,-0.05933,0.14941],[0.12945,-0.21905,-0.02393,-0.61305,0.43888,-0.14758,-0.11056,0.00215,-1.19042,-0.52248,-0.01655,-0.07393,-0.11667,-0.37853,-0.52916,0.10215,0.1265,-0.11901,-1.59989,-0.47962,-0.50184,0.33962,-0.51285,-0.48645,0.36988,-0.05452,0.25655,0.3718,0.18109,-0.04143,-0.2694,0.01003,0.13241,-0.05485,0.12664,0.09458,-0.48062,0.1838,-0.13817,-0.11897,0.60852,-0.24067,0.0608,0.41663,-0.16616,0.43068,0.06363,-0.24536,0.28789,-0.14266,0.7581,0.49623,0.97768,0.63157,-0.07765,0.13842,-0.22893,0.72418,0.33929,-0.03463,0.13786,-0.32666,-0.01114,-0.18678],[-0.07159,0.09089,-0.03436,0.27654,0.3558,-0.3604,-0.1882,0.31125,-0.4323,-0.40561,-0.18636,0.56965,0.13483,-0.25553,-0.45415,-0.40029,0.08493,0.07248,-0.40064,-0.14637,-0.17119,0.41411,-0.00788,-0.04291,0.43376,0.55527,0.01865,0.6546,0.24566,-0.77409,0.34656,-0.05877,-0.51188,-1.04209,-0.40438,0.29509,-0.53121,0.34295,-0.06329,-0.12472,-0.30745,-0.48813,-0.41783,0.4766,-0.79901,0.052,0.18558,0.41916,-0.10058,-0.13907,0.40925,0.80403,-0.01886,-0.68213,0.62651,0.08723,-0.04714,0.54168,0.47851,-0.3333,-1.46134,0.35662,0.16964,-0.06072],[-0.60522,0.27292,0.6633,-0.35754,-0.26313,0.11164,-0.06745,-0.32067,-0.61982,-0.26799,-0.5728,0.12561,-0.12,-1.4054,0.13378,0.06459,0.58743,0.37318,-0.33183,-0.21535,-0.67754,-1.24049,-0.56548,-0.95709,0.24635,-1.24891,-0.09944,-0.416,0.19118,-0.44236,-0.11909,-1.09558,0.75665,-0.41416,0.15316,0.08395,-0.17198,-0.51516,-0.03454,0.36735,-0.71398,-0.4245,0.63247,-0.14239,0.90334,-0.53674,0.18585,-1.14726,0.05272,-0.2016,-0.04164,0.26905,-0.66918,0.91085,0.26026,0.38479,0.13263,0.38897,0.06651,0.15198,0.47542,-1.05261,-0.01393,0.12514],[1.0519,-0.06685,-0.144,-0.12752,-0.08555,0.3373,0.04944,-0.58147,-0.26079,-0.41514,-0.32568,-0.54288,-0.32738,0.00924,0.34379,0.08594,0.22828,-0.23721,0.91848,-0.18565,-0.70616,-0.64527,0.15614,0.09428,-0.21374,-0.65454,-0.0086,-0.34141,-0.25671,0.40791,0.05311,0.35911,0.30491,-0.20435,0.21487,0.09367,0.32591,-0.67863,-0.15678,0.24967,-0.15696,0.17954,0.43443,-0.37274,0.14709,-0.70889,-0.0745,-0.58242,0.12065,0.08252,-0.33119,0.15479,-0.32785,0.49266,-0.1047,0.29705,-0.22958,0.22562,-0.55137,-0.34643,-0.04717,-0.24722,0.14452,0.62979],[-0.22025,0.16769,-1.738,0.02005,0.16311,-0.05698,-0.31893,-0.02863,0.49842,-0.9139,-0.79851,-0.21326,-0.17211,-0.39923,0.18458,0.07332,0.23568,-1.24211,-0.17164,0.10087,0.30631,-0.82136,-0.63045,-0.37179,-0.15367,-0.25365,0.27077,-0.48909,-0.03314,-0.44051,0.29644,0.0078,-0.14425,0.01462,0.18924,-0.186,-0.53663,0.24196,0.1519,0.18621,0.00551,0.17204,-0.20229,0.12555,-0.03951,0.16621,0.01746,-0.65682,-0.73448,-0.10472,-0.19231,-0.34201,0.44527,-0.53217,-0.27281,-0.20711,-0.15705,-0.365,-0.00109,0.04887,0.08361,0.65655,0.45444,-0.35791],[-0.24658,-0.18091,0.38992,-0.47483,-0.2601,0.7178,-0.17335,0.32451,-0.09181,-0.47797,0.21503,0.52131,0.16715,-0.79764,-0.53131,0.07284,-0.11997,0.85942,-0.40311,-0.14943,-0.50875,0.0456,0.24851,-0.82909,0.28109,0.3608,-0.13476,0.91288,0.09967,-1.04545,-0.0894,0.43415,-0.80476,-0.78523,-0.03776,-0.71556,-1.03884,0.38215,-0.37635,0.49323,-1.02822,-0.11476,-1.20969,0.5115,0.00603,0.39151,-0.14111,-0.35842,-0.34755,-0.44969,0.25176,0.65592,1.19804,-0.63656,-0.67949,0.27974,-0.82633,0.12753,0.58212,-0.32575,-0.90399,-0.37697,0.69477,-0.35078],[0.04499,0.13574,0.62546,-1.36759,-0.3848,0.08959,-1.33482,0.14489,-0.77269,-0.97894,-0.65347,0.09105,0.17286,-0.77784,0.29375,-0.01754,0.4073,0.77698,-0.76041,-0.07241,-1.1312,-0.37632,0.22212,-0.55304,0.371,-0.03557,-0.1075,0.44855,-0.10682,-0.86169,0.1002,-0.33843,0.4805,-1.53849,-0.22757,-0.71923,-0.34535,-0.05159,-0.01341,0.29412,-1.35575,-1.03602,-2.10568,0.69299,0.90638,0.34371,0.27803,-1.35022,0.2202,-1.63083,0.40365,1.16747,1.32906,0.83149,-0.59203,0.9898,-2.18849,0.76592,1.06537,-0.02047,-1.02212,-0.28005,0.47974,-1.89002]],"b":[0.17194,-0.0952,0.18942,-0.12561,-0.1306,-0.24018,-0.10532,0.04547,-0.07799,-0.05398,-0.14245,0.20058,-0.13945,-0.11934,-0.20454,0.11448,-0.06349,-0.02897,0.03878,-0.03633,0.11288,-0.19006,-0.04332,0.13482,-0.04507,0.44392,0.12252,0.11534,-0.0661,-0.03939,-0.10197,-0.18883,-0.0503,-0.05136,-0.24529,-0.06332,-0.25699,-0.10074,0.18029,-0.29583,-0.17298,0.12942,-0.17121,-0.23338,-0.12037,0.06626,-0.00272,-0.07254,0.29128,-0.26093,-0.36276,-0.03174,-0.3774,-0.06342,0.07152,-0.06099,-0.07147,0.28831,-0.31036,0.10865,0.46225,0.10038,-0.40434,-0.3087]},{"W":[[-0.21976,0.05952,-0.53115,-0.04828,0.08195,-0.39017,-0.00435,-0.12686,0.19073,-0.11032,0.3862,-0.01404,0.09332,0.03206,-1.57396,0.15274,0.18865,-0.00359,-0.31481,-0.14212,0.151,-1.82495,-1.25255,-0.2413,-0.03096,-0.01333,-0.12945,0.08841,0.15866,-0.04291,-0.06655,-0.92354,0.01895,0.12548,0.38741,-0.00075,-1.73704,-1.11617,0.03233,0.34056,-0.2362,-0.85674,-0.18708,0.01956,-1.92928,0.59574,-0.14431,0.0267,-0.54174,0.56405,0.04234,-0.28222,-0.6593,0.0321,-0.36347,0.20704,0.19926,-0.50535,-0.32139,-1.11741,-0.19027,0.24003,-1.71557,-2.00751],[-0.22853,0.07651,-0.39213,0.05239,0.26717,-0.5047,0.30475,-0.13224,0.26759,0.04502,0.47886,-0.12477,0.15365,0.10084,-1.48329,0.27427,-0.01047,0.39484,-0.14453,-0.02225,0.18905,-1.65002,-1.04248,-0.33148,0.1364,-0.14698,-0.1694,0.06343,0.11184,-0.01707,-0.18464,-1.26326,-0.02922,0.21164,0.5879,0.02726,-1.64438,-0.87681,-0.12702,0.47037,-0.59861,-0.76724,0.21256,0.34742,-2.07358,0.78929,0.19255,-0.04802,-0.5255,0.70307,0.12303,-0.09938,-0.46468,0.08104,-0.42524,-0.04445,-0.1582,-0.35158,-0.3084,-1.1367,-0.18233,0.26216,-1.31686,-2.02592],[-0.42646,0.05618,-0.81184,-0.1587,-0.1694,-0.36757,0.14032,-0.16212,0.00402,-0.18145,0.40803,-0.24278,0.04206,0.08082,-1.13431,0.28758,0.05529,-0.31491,0.04169,-0.08383,0.12949,-1.46645,-0.79991,-0.29532,0.1091,-0.23895,-0.23955,0.05662,-0.0928,0.11687,-0.25452,-1.11898,-0.15445,0.21044,0.60911,-0.10682,-1.72987,-0.81302,-0.18329,0.71038,-0.67558,-0.51396,0.63828,0.07111,-2.14135,0.89093,0.08848,0.0231,-0.38208,0.70923,0.044,0.02886,-0.42018,-0.01323,-0.3831,-0.42241,0.00713,-0.40917,-0.27056,-0.92609,-0.37115,0.3397,-1.35961,-2.10429],[-0.43857,0.07234,-0.56787,-0.09706,-0.28197,-0.10918,0.15778,-0.08528,0.2019,-0.15794,0.41579,-0.37706,-0.00433,0.01736,-1.31538,0.43414,0.08686,0.15356,0.28497,0.21767,0.10637,-1.30772,-0.90349,-0.38344,-0.01045,-0.41853,-0.26165,-0.03877,-0.11689,0.16247,-0.40023,-1.54406,-0.05932,0.35855,0.79611,0.04609,-1.5989,-0.58922,-0.20926,0.79405,-0.6802,-0.87503,0.51809,0.24826,-2.18925,0.91638,0.06243,0.01893,-0.23398,0.75656,0.06104,0.35265,-0.46161,-0.13137,-0.62238,0.06717,0.20077,-0.44883,-0.31563,-1.21699,-0.70828,0.34388,-1.15231,-2.15069],[-0.61083,0.13769,-0.35664,-0.60225,0.02217,-0.03799,-0.06625,-0.28286,0.00668,0.28829,0.3745,-0.37869,-0.32718,0.13873,-0.64433,0.4937,-0.17619,0.17965,0.30616,0.02906,0.10521,-1.32193,-0.91302,-0.35095,0.47367,-0.58027,-0.42783,0.05686,-0.01377,0.1172,-0.41886,-1.19541,0.08907,0.32276,0.80029,0.14687,-1.63478,-0.38934,-0.27348,0.46122,-0.69791,-0.45735,0.96873,0.14976,-2.32853,1.12708,0.21158,0.08839,-0.37422,0.9745,-0.07739,0.07772,-0.83699,0.19891,-0.37363,-0.22922,-0.39492,-0.14246,-0.21569,-1.25993,-0.84143,0.41847,-0.60143,-2.49521]],"b":[-0.18226,-0.20552,-0.1873,-0.33355,-0.29105]}],"actions_mm":[0,5,10,15,20],"note":"numpy double-DQN trained on the notebook simulator"};
+let POLICY = DEFAULT_POLICY, POLICY_NAME = 'Embedded DQN, trained on the notebook simulator (300,000 steps)';
+
+const $ = id => document.getElementById(id);
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const fmtDate = iso => { const [y, m, d] = iso.split('-').map(Number); return `${d} ${MON[m - 1]}`; };
+const f1 = v => (Math.round(v * 10) / 10).toFixed(1), f2 = v => v.toFixed(2);
+const state = { plot: Object.keys(DATA.plots)[0], idx: DATA.days.length - 1, hover: null, series: null };
+
+/* ---------- inputs ---------- */
+const MAIN = { theta: 'in-theta', t: 'in-t', rain: 'in-rain', rh: 'in-rh' };
+const LIMITS = { theta: [0, 100], t: [-10, 55], rain: [0, 500], rh: [0, 100], u2: [0, 30], rn: [-5, 40], g: [-5, 5], h: [0, 5] };
+const clamp = (v, k) => Math.min(LIMITS[k][1], Math.max(LIMITS[k][0], v));
+
+function datasetRow() {
+  const P = DATA.plots[state.plot], i = state.idx;
+  return { theta: P.theta[i], t: P.t[i], rain: P.rain[i], rh: P.rh[i], stage: stageOf(P.das[i]), das: P.das[i] };
+}
+function setInputsFromDataset() {
+  const r = datasetRow();
+  $('in-theta').value = f1(r.theta); $('in-t').value = f1(r.t); $('in-rain').value = f1(r.rain); $('in-rh').value = f1(r.rh);
+  document.querySelector(`input[name=stage][value="${r.stage}"]`).checked = true;
+}
+function num(id, key, fallback, dsValue) {
+  const raw = $(id).value, v = parseFloat(raw);
+  if (dsValue !== undefined && Number.isFinite(v) && Math.abs(v - +f1(dsValue)) < 1e-9) return dsValue;   // untouched field: keep the exact dataset value
+  return Number.isFinite(v) ? clamp(v, key) : fallback;
+}
+const differs = (id, dsValue) => { const v = parseFloat($(id).value); return Number.isFinite(v) && Math.abs(v - +f1(dsValue)) > 1e-9; };
+function readInputs() {
+  const d = datasetRow();
+  return {
+    theta: num('in-theta', 'theta', d.theta, d.theta), t: num('in-t', 't', d.t, d.t), rain: num('in-rain', 'rain', d.rain, d.rain), rh: num('in-rh', 'rh', d.rh, d.rh),
+    stage: +document.querySelector('input[name=stage]:checked').value,
+    ex: { u2: num('ex-u2', 'u2', 2), rn: num('ex-rn', 'rn', 12), g: num('ex-g', 'g', 0), h: num('ex-h', 'h', 1) }
+  };
+}
+
+/* ---------- render ---------- */
+function recompute() {
+  const v = readInputs(), d = datasetRow();
+  const ov = { idx: state.idx, theta: v.theta, t: v.t, rh: v.rh, rain: v.rain, stage: v.stage };
+  state.series = buildSeries(DATA, state.plot, POLICY, v.ex, ov);
+  const edited = {
+    theta: differs('in-theta', d.theta), t: differs('in-t', d.t), rain: differs('in-rain', d.rain), rh: differs('in-rh', d.rh), stage: v.stage !== d.stage
+  };
+  for (const k of ['theta', 't', 'rain', 'rh']) {
+    $('f-' + k).classList.toggle('edited', edited[k]);
+    $('f-' + k).querySelector('.hint').textContent = 'Dataset: ' + f1(d[k]);
+  }
+  $('stage-hint').textContent = 'Dataset: ' + STAGES[d.stage] + ' (' + d.das + ' days after sowing)';
+  const any = Object.values(edited).some(Boolean);
+  $('edited').textContent = any ? 'Edited values' : 'Dataset values';
+  $('edited').classList.toggle('on', any);
+  $('reset').disabled = !any;
+  renderResults(); drawChart(); renderTable();
+}
+
+function renderResults() {
+  const s = state.series[state.idx], f = s.fao, d = s.drl;
+  const label = fmtDate(s.date) + ' ' + s.date.slice(0, 4);
+  $('res-date').textContent = '· ' + label;
+  $('rx-date').textContent = state.plot + ' · ' + label;
+  $('fao-et0').textContent = f2(f.et0); $('fao-kc').textContent = f2(f.kc); $('fao-etc').textContent = f2(f.etc);
+  $('fao-kcn').textContent = STAGES[s.stage] + ' stage';
+  $('drl-et0').textContent = f2(f.et0); $('drl-kc').textContent = f2(d.kcEff); $('drl-etc').textContent = f2(d.eta);
+  $('drl-kcn').textContent = 'Ks = ' + f2(d.ks) + (d.ks < 0.995 ? ', crop is water-stressed' : ', no water stress');
+  const irrigate = d.irr > 0;
+  $('rx-pill').innerHTML = irrigate
+    ? '<span class="pill irrigate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/></svg>IRRIGATE</span>'
+    : '<span class="pill skip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>NO IRRIGATION</span>';
+  $('rx-mm').textContent = d.irr;
+  $('rx-vol').textContent = d.irr * 10 + ' m³ per hectare';
+  $('rx-dep').textContent = Math.round(d.depPct);
+  $('rx-ks').textContent = 'Stress threshold ' + Math.round(P_DEP * 100) + '%, Ks ' + f2(d.ks) + ' after irrigation and rain';
+  $('rx-reason').textContent = d.reason;
+  $('rx-budget').textContent = 'Recommended irrigation from ' + fmtDate(DATA.days[0]) + ' to ' + fmtDate(s.date) + ': ' + s.cumIrr + ' mm (' + s.cumIrr * 10 + ' m³/ha) of a ' + BUDGET + ' mm budget.';
+}
+
+/* ---------- chart ---------- */
+function niceMax(v) { const steps = [0.5, 1, 2, 2.5, 5, 10]; for (const st of steps) { if (v / st <= 6) return { max: Math.ceil(v / st) * st, step: st }; } return { max: Math.ceil(v), step: 10 }; }
+function drawChart() {
+  const S = state.series, el = $('chart'), W = Math.max(280, el.clientWidth || 640), H = W < 520 ? 240 : 300;
+  const m = { l: 38, r: 66, t: 24, b: 30 }, iw = W - m.l - m.r, ih = H - m.t - m.b, n = S.length;
+  const top = Math.max(...S.map(x => Math.max(x.fao.etc, x.drl.eta)), 1), { max, step } = niceMax(top * 1.05);
+  const X = i => m.l + (n === 1 ? iw / 2 : iw * i / (n - 1)), Y = v => m.t + ih - ih * v / max;
+  let g = '';
+  for (let v = 0; v <= max + 1e-9; v += step) {
+    g += `<line x1="${m.l}" x2="${m.l + iw}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/>` +
+         `<text x="${m.l - 8}" y="${Y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${v % 1 ? v.toFixed(1) : v}</text>`;
+  }
+  const xs = []; for (let i = 0; i < n; i += (W < 520 ? 7 : 5)) xs.push(i); if (xs[xs.length - 1] !== n - 1 && n - 1 - xs[xs.length - 1] > 2) xs.push(n - 1);
+  xs.forEach(i => { g += `<text x="${X(i)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="var(--muted)">${fmtDate(S[i].date)}</text>`; });
+  g += `<text x="2" y="11" font-size="11" fill="var(--muted)">ETc, mm/day</text>`;
+  const path = k => S.map((x, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(k(x)).toFixed(1)).join('');
+  const sel = state.idx, hv = state.hover;
+  g += `<line x1="${X(sel)}" x2="${X(sel)}" y1="${m.t}" y2="${m.t + ih}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3"/>`;
+  if (hv !== null && hv !== sel) g += `<line x1="${X(hv)}" x2="${X(hv)}" y1="${m.t}" y2="${m.t + ih}" stroke="var(--line)" stroke-width="1.5"/>`;
+  g += `<path d="${path(x => x.fao.etc)}" fill="none" stroke="var(--fao)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  g += `<path d="${path(x => x.drl.eta)}" fill="none" stroke="var(--drl)" stroke-width="2.2" stroke-dasharray="6 4" stroke-linejoin="round" stroke-linecap="round"/>`;
+  const pts = i => `<circle cx="${X(i)}" cy="${Y(S[i].fao.etc)}" r="5" fill="var(--fao)" stroke="var(--surface)" stroke-width="2"/>` +
+                   `<circle cx="${X(i)}" cy="${Y(S[i].drl.eta)}" r="3" fill="var(--drl)" stroke="var(--surface)" stroke-width="1.5"/>`;
+  g += pts(sel); if (hv !== null && hv !== sel) g += pts(hv);
+  const last = S[n - 1], yf = Y(last.fao.etc), yd = Y(last.drl.eta), up = yf <= yd;
+  g += `<text x="${m.l + iw + 8}" y="${(up ? yf : yd) - 4}" font-size="11.5" font-weight="600" fill="var(--ink)">${up ? 'FAO' : 'DRL'}</text>` +
+       `<text x="${m.l + iw + 8}" y="${(up ? yd : yf) + 12}" font-size="11.5" font-weight="600" fill="var(--ink)">${up ? 'DRL' : 'FAO'}</text>`;
+  g += `<rect x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent" id="hit" style="cursor:pointer"/>`;
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">${g}</svg>`;
+  const hit = $('hit'), idxAt = ev => { const r = hit.getBoundingClientRect(); return Math.max(0, Math.min(n - 1, Math.round((ev.clientX - r.left) / r.width * (n - 1)))); };
+  hit.addEventListener('pointermove', ev => { const i = idxAt(ev); if (i !== state.hover) { state.hover = i; drawChart(); showTip(i, X(i), W); } });
+  hit.addEventListener('pointerleave', () => { state.hover = null; $('tip').hidden = true; drawChart(); });
+  hit.addEventListener('click', ev => { loadDay(idxAt(ev)); });
+  const diff = Math.max(...S.map(x => Math.abs(x.fao.etc - x.drl.eta)));
+  $('chart-note').textContent = diff < 0.005
+    ? 'The two lines overlap because the crop is not water-stressed on any day, so the DRL actual ETc equals the FAO ETc. Click a point to open that date.'
+    : 'The DRL line falls below the FAO line on days when the root zone is too dry for the prescribed irrigation to avoid stress. Click a point to open that date.';
+}
+function showTip(i, x, W) {
+  const s = state.series[i], tip = $('tip');
+  tip.innerHTML = `<b>${fmtDate(s.date)} · ${state.plot}</b><div><span style="color:var(--muted)">FAO-56 ETc</span><span class="num">${f2(s.fao.etc)} mm</span></div><div><span style="color:var(--muted)">DRL actual ETc</span><span class="num">${f2(s.drl.eta)} mm</span></div><div><span style="color:var(--muted)">Irrigation</span><span class="num">${s.drl.irr} mm</span></div>`;
+  tip.hidden = false;
+  const bw = $('chart').clientWidth, left = x / W * bw;
+  tip.style.left = Math.min(Math.max(8, left + 12), bw - tip.offsetWidth - 4) + 'px'; tip.style.top = '8px';
+}
+function renderTable() {
+  const rows = state.series.map((s, i) => `<tr class="${i === state.idx ? 'sel' : ''}"><td>${fmtDate(s.date)}</td><td class="num">${f2(s.fao.et0)}</td><td class="num">${f2(s.fao.etc)}</td><td class="num">${f2(s.drl.eta)}</td><td class="num">${s.drl.irr}</td></tr>`).join('');
+  $('tblwrap').innerHTML = `<table><thead><tr><th>Date</th><th>ET0 (mm)</th><th>FAO-56 ETc (mm)</th><th>DRL actual ETc (mm)</th><th>Irrigation (mm)</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+/* ---------- navigation ---------- */
+function loadDay(i) {
+  state.idx = Math.max(0, Math.min(DATA.days.length - 1, i));
+  $('date').value = DATA.days[state.idx];
+  $('prev').disabled = state.idx === 0; $('next').disabled = state.idx === DATA.days.length - 1;
+  setInputsFromDataset(); recompute();
+}
+$('plot').innerHTML = Object.keys(DATA.plots).map(p => `<option value="${p}">Plot ${p}</option>`).join('');
+$('plot').addEventListener('change', e => { state.plot = e.target.value; loadDay(state.idx); });
+$('date').min = DATA.days[0]; $('date').max = DATA.days[DATA.days.length - 1];
+$('date').addEventListener('change', e => { const i = DATA.days.indexOf(e.target.value); if (i >= 0) loadDay(i); else $('date').value = DATA.days[state.idx]; });
+$('prev').addEventListener('click', () => loadDay(state.idx - 1));
+$('next').addEventListener('click', () => loadDay(state.idx + 1));
+$('reset').addEventListener('click', () => { setInputsFromDataset(); recompute(); });
+['in-theta', 'in-t', 'in-rain', 'in-rh', 'ex-u2', 'ex-rn', 'ex-g', 'ex-h'].forEach(id => $(id).addEventListener('input', recompute));
+document.querySelectorAll('input[name=stage]').forEach(r => r.addEventListener('change', recompute));
+$('tblbtn').addEventListener('click', () => { const open = $('tblwrap').hidden; $('tblwrap').hidden = !open; $('tblbtn').textContent = open ? 'Hide table' : 'Show as table'; $('tblbtn').setAttribute('aria-expanded', open); });
+try { new ResizeObserver(() => drawChart()).observe($('chart')); } catch (e) { window.addEventListener('resize', drawChart); }
+
+/* ---------- optional: load a policy exported from Colab ---------- */
+$('policyname').textContent = POLICY_NAME;
+$('policyfile').addEventListener('change', e => {
+  const file = e.target.files[0]; if (!file) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const p = JSON.parse(rd.result), L = p.layers;
+      if (!Array.isArray(L) || L.length < 2) throw new Error('no layers found');
+      if (L[0].W[0].length !== 10) throw new Error('first layer must take 10 inputs, this one takes ' + L[0].W[0].length);
+      if (L[L.length - 1].W.length !== 5) throw new Error('last layer must give 5 values, this one gives ' + L[L.length - 1].W.length);
+      qValues(p, new Array(10).fill(0));
+      POLICY = p; POLICY_NAME = 'Loaded from ' + file.name; $('policyname').textContent = POLICY_NAME; $('policyerr').textContent = '';
+      recompute();
+    } catch (err) { $('policyerr').textContent = 'Could not use this file: ' + err.message + '.'; }
+  };
+  rd.readAsText(file);
+});
+
+loadDay(state.idx);
+</script>
+
+</body></html>
